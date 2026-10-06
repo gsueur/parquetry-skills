@@ -27,3 +27,12 @@ jobs:
         run: uv run tests/check_recipes.py --slow
       - name: locate.py
         run: uv run skills/reference-data/scripts/locate.py 2.3522 48.8566 | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['admin']['iso3_code']=='FRA' and d['land_cover']['clc_code'], d"
+      - name: write_geoparquet.py
+        run: |
+          S=skills/write-geoparquet/scripts/write_geoparquet.py
+          # lon/lat, partitioned, from a URL
+          uv run $S "https://parquetry.geomermaids.com/gaul/2024/country=FRA/L2.parquet" out_fra --partition-by gaul1_name --name L2
+          test -f out_fra/_manifest.json
+          # projected CRS (EPSG:3035), subdivided: the CRS must survive the rewrite
+          uv run $S "https://parquetry.geomermaids.com/clc/2018/country=LU/clc_2018.parquet" out_lu.parquet --subdivide 256
+          uv run --with duckdb python -c "import duckdb; t = duckdb.sql(\"SELECT any_value(typeof(geometry)), max(ST_NPoints(geometry)) FROM read_parquet('out_lu.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:3035')\", 256), t"

@@ -1,7 +1,15 @@
 # parquetry skills
 
-A skill that lets an AI agent answer spatial questions with real reference
-data, not general knowledge:
+Two skills for AI agents working with GeoParquet:
+
+- **`reference-data`** answers spatial questions with real reference data.
+- **`write-geoparquet`** writes optimized GeoParquet the way these datasets
+  are written (see [below](#writing-geoparquet)).
+
+## Answering spatial questions
+
+The `reference-data` skill lets an agent answer questions with real data,
+not general knowledge:
 
 - *What is the predominant land use in Hérault, France?*
 - *How many buildings could be hit by a 100-year flood in Eastern Massachusetts?*
@@ -24,6 +32,20 @@ parts of the GeoParquet files the question needs.
 | [CORINE Land Cover 2018](https://parquetry.geomermaids.com/clc/) | Europe | Land cover and land use, 44 classes |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 
+## Writing GeoParquet
+
+The `write-geoparquet` skill turns any vector source DuckDB reads into a
+GeoParquet file that is fast over HTTP: GeoParquet 2.0 with native
+GEOMETRY, a bbox covering column, Hilbert order, row groups capped by bytes
+(DuckDB will not write them under 2,048 rows, so pyarrow and geoarrow cut
+them), optional subdivision of heavy polygons, partitioning with a
+manifest, and a verification of every file. Each rule comes with the
+measurement behind it, from building these datasets.
+
+```
+uv run skills/write-geoparquet/scripts/write_geoparquet.py zones.gpkg zones.parquet --make-valid --subdivide 100
+```
+
 ## Install
 
 ### Claude Code
@@ -33,14 +55,14 @@ parts of the GeoParquet files the question needs.
 /plugin install parquetry@geomermaids
 ```
 
-The skill loads when a question needs geographic data. You can also call
-it by name: `/parquetry:reference-data`.
+The skills load when a task needs them. You can also call them by name:
+`/parquetry:reference-data`, `/parquetry:write-geoparquet`.
 
 ### Other agents
 
-The skill is plain Markdown in `skills/reference-data/`: `SKILL.md` is the
-method, `reference/datasets.md` the data, `reference/recipes.md` the
-tested queries. Point any agent that can run code at those files.
+The skills are plain Markdown in `skills/`: each `SKILL.md` is the method,
+`reference/` holds the details. Point any agent that can run code at those
+files.
 
 The agent needs a shell with [DuckDB](https://duckdb.org) 1.5 or later
 (the CLI or the Python package) and network access to
@@ -57,6 +79,12 @@ skills/reference-data/
                            overlay count, length in area, nearest, tagging, per-unit stats
   reference/osm-regions.csv  the 98 OpenStreetMap regions
   scripts/locate.py        everything the datasets say about one lon/lat
+skills/write-geoparquet/
+  SKILL.md                 the rules: format, CRS, bbox, sort, row groups, subdivision,
+                           compression, partitioning, verification
+  reference/measurements.md  the numbers behind each rule
+  reference/publishing.md  headers, caching, object storage, docs, mistakes we made
+  scripts/write_geoparquet.py  applies the rules and verifies the output
 tests/check_recipes.py     runs every recipe against the live data
 ```
 

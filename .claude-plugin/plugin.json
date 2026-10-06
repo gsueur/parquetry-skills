@@ -1,10 +1,23 @@
 {
   "name": "parquetry",
-  "description": "Answer spatial questions with the Geomermaids parquetry reference datasets (FAO GAUL admin units, GMWID infrastructure, FEMA flood zones, CORINE land cover, OpenStreetMap North America), queried in place with DuckDB.",
-  "version": "0.1.0",
-  "author": { "name": "Geomermaids", "url": "https://geomermaids.com" },
+  "description": "Answer spatial questions with the Geomermaids parquetry reference datasets (GAUL, GMWID, FEMA NFHL, CORINE, OpenStreetMap North America) queried in place with DuckDB, and write optimized GeoParquet the way those datasets are written.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Geomermaids",
+    "url": "https://geomermaids.com"
+  },
   "homepage": "https://geoparquet.geomermaids.com",
   "repository": "https://github.com/gsueur/parquetry-skills",
   "license": "MIT",
-  "keywords": ["geospatial", "geoparquet", "duckdb", "gis", "openstreetmap", "flood", "land-cover", "admin-boundaries", "infrastructure"]
+  "keywords": [
+    "geospatial",
+    "geoparquet",
+    "duckdb",
+    "gis",
+    "openstreetmap",
+    "flood",
+    "land-cover",
+    "admin-boundaries",
+    "infrastructure"
+  ]
 }
