@@ -1,7 +1,7 @@
 {
   "name": "parquetry",
   "description": "Answer spatial questions with the Geomermaids parquetry reference datasets (GAUL, GMWID, FEMA NFHL, CORINE, OpenStreetMap North America) queried in place with DuckDB, and write optimized GeoParquet the way those datasets are written.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "Geomermaids",
     "url": "https://geomermaids.com"
