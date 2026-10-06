@@ -4,8 +4,10 @@ name: recipes
 # under them (OSM nightly, FEMA daily, GMWID weekly), so this catches a
 # change that breaks a query before someone's agent does.
 on:
+  # Every branch, not only main: the push gives a PR's head commit the
+  # required `recipes` check even when GitHub does not fire the
+  # pull_request event (it skipped it on PRs #1 and #2).
   push:
-    branches: [main]
   pull_request:
   schedule:
     - cron: "17 6 * * 1"
