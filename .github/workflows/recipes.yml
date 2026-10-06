@@ -35,4 +35,4 @@ jobs:
           test -f out_fra/_manifest.json
           # projected CRS (EPSG:3035), subdivided: the CRS must survive the rewrite
           uv run $S "https://parquetry.geomermaids.com/clc/2018/country=LU/clc_2018.parquet" out_lu.parquet --subdivide 256
-          uv run --with duckdb python -c "import duckdb; t = duckdb.sql(\"SELECT any_value(typeof(geometry)), max(ST_NPoints(geometry)) FROM read_parquet('out_lu.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:3035')\", 256), t"
+          uv run --with duckdb python -c "import duckdb; duckdb.sql(\"INSTALL spatial; LOAD spatial\"); t = duckdb.sql(\"SELECT any_value(typeof(geometry)), max(ST_NPoints(geometry)) FROM read_parquet('out_lu.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:3035')\", 256), t"
