@@ -6,6 +6,17 @@ Two skills for AI agents working with GeoParquet:
 - **`write-geoparquet`** writes optimized GeoParquet the way these datasets
   are written (see [below](#writing-geoparquet)).
 
+<p>
+  <a href="docs/agent-boston-1200.webp"><img src="docs/agent-boston-1200.webp" width="49%" alt="Map of the Boston waterfront: OpenStreetMap buildings that touch a FEMA 1% annual-chance flood zone are highlighted. Answer: 95,264 buildings in Eastern Massachusetts."></a>
+  <a href="docs/agent-herault-1200.webp"><img src="docs/agent-herault-1200.webp" width="49%" alt="Land cover map of Hérault: forest and garrigue in the hills, vineyards on the plain, lagoons on the coast. Answer: 49% forest and semi-natural land, vineyards the largest single class at 23.8%."></a>
+</p>
+
+Two answers the skill gave, mapped from the same files: 95,264 buildings in
+Eastern Massachusetts touch a 100-year flood zone (FEMA NFHL and
+OpenStreetMap, Boston waterfront shown), and Hérault is 49% forest and
+semi-natural land while vineyards are its largest single class (CORINE Land
+Cover 2018 clipped to FAO GAUL).
+
 ## Answering spatial questions
 
 The `reference-data` skill lets an agent answer questions with real data,
