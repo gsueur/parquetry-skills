@@ -1,0 +1,29 @@
+name: recipes
+
+# Every recipe in the skill runs against the live datasets. The data moves
+# under them (OSM nightly, FEMA daily, GMWID weekly), so this catches a
+# change that breaks a query before someone's agent does.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recipes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Manifests parse
+        run: python3 -c "import json; [json.load(open(f)) for f in ('.claude-plugin/plugin.json', '.claude-plugin/marketplace.json')]"
+      - name: Recipes
+        run: uv run tests/check_recipes.py --slow
+      - name: locate.py
+        run: uv run skills/reference-data/scripts/locate.py 2.3522 48.8566 | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['admin']['iso3_code']=='FRA' and d['land_cover']['clc_code'], d"
