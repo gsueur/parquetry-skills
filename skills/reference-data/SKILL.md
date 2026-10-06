@@ -139,8 +139,7 @@ infrastructure in one call:
 uv run scripts/locate.py -71.0490 42.3480 --radius-km 2
 ```
 
-It takes 10 to 60 s: a point in the US or another large country reads
-that country's whole GAUL file (see Pitfalls).
+It takes 10 to 30 s, most of it in the GMWID infrastructure search.
 
 ### 6. Answer
 
@@ -159,15 +158,10 @@ Offer the SQL you ran, so the person can rerun or adjust it.
 
 ## Pitfalls
 
-- A geometry filter on a whole-world file is slow: the GAUL world L2 file
-  takes about 12 s for one point. Find the country from the L0 boxes
-  first (under 1 s), then read that country's file.
-- The GAUL files of large countries are one row group, so a bbox filter
-  cannot skip anything: `country=USA/L2.parquet` is 69 MB read in full.
-  Read such a file once into a local table and reuse it for every point
-  or area of the session. For a US county, the NFHL index
-  (`counties.parquet`, 2,500 rows) is a faster first lookup when the
-  county has a FEMA delivery.
+- For one point, the GAUL world L2 file answers in about 3 s and a country
+  file in about 2 s. For many points across countries, find the countries
+  from the L0 boxes first (under 1 s, no geometry read), then read only
+  their files, as in the tag-points recipe.
 - `ST_Transform` without `SET geometry_always_xy = true` reads EPSG:4326
   as lat, lon and puts the point in the wrong place without an error.
 - NFHL rows are pieces of zones, cut to at most 100 vertices. Count zones

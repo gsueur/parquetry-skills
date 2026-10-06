@@ -13,9 +13,12 @@ Filter on `bbox` first. The geometry column is native Parquet `GEOMETRY`.
 
 | Level | Rows | File for one country | World file |
 |---|---|---|---|
-| L0 countries (derived) | 272 | `gaul/2024/country=<ISO3>/L0_derived.parquet` | `gaul/2024/GAUL_2024_L0_derived.parquet` (286 MB, one row group) |
-| L1 states, regions, provinces | 3,110 | `gaul/2024/country=<ISO3>/L1.parquet` | `gaul/2024/GAUL_2024_L1.parquet` (326 MB) |
-| L2 districts, counties, départements | 45,524 | `gaul/2024/country=<ISO3>/L2.parquet` | `gaul/2024/GAUL_2024_L2.parquet` (489 MB) |
+| L0 countries (derived) | 272 | `gaul/2024/country=<ISO3>/L0_derived.parquet` | `gaul/2024/GAUL_2024_L0_derived.parquet` (228 MB) |
+| L1 states, regions, provinces | 3,110 | `gaul/2024/country=<ISO3>/L1.parquet` | `gaul/2024/GAUL_2024_L1.parquet` (268 MB) |
+| L2 districts, counties, départements | 45,524 | `gaul/2024/country=<ISO3>/L2.parquet` | `gaul/2024/GAUL_2024_L2.parquet` (419 MB) |
+
+Row groups hold at most 4 MiB of geometry, so a bbox filter on a point
+reads a couple of MB even in the largest country file.
 
 - Columns: `iso3_code`, `gaul0_code`, `gaul0_name`, `gaul1_code`,
   `gaul1_name`, `gaul2_code`, `gaul2_name` (L2 rows carry all three
