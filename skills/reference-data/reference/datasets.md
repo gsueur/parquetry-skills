@@ -9,6 +9,13 @@ Every file has a `bbox` struct column (`xmin`, `ymin`, `xmax`, `ymax`),
 declared as the GeoParquet covering, and is sorted along a Hilbert curve.
 Filter on `bbox` first. The geometry column is native Parquet `GEOMETRY`.
 
+The `bbox` fields are FLOAT in GAUL, GMWID, OpenStreetMap and Geoconnex
+(DOUBLE in NFHL and CORINE). Compare them with literals or FLOAT values:
+a DOUBLE bound (any computed value, any Python float passed as a
+parameter) makes DuckDB 1.5 cast the column and skip no row group, 5 to
+10 times slower. Cast computed bounds with `::FLOAT`, widened by 1e-4
+degree so the rounding never cuts a feature off.
+
 ## FAO GAUL 2024: administrative units, worldwide
 
 | Level | Rows | File for one country | World file |
@@ -154,6 +161,42 @@ The first digit is the level-1 group: **1** artificial surfaces,
 | 511 | Water courses | 423 | Intertidal flats |
 | 512 | Water bodies | 521 | Coastal lagoons |
 | 522 | Estuaries | 523 | Sea and ocean |
+
+## Geoconnex: US water reference features and monitoring sites
+
+Geoconnex (Internet of Water) links US water data to the places it
+describes. Republished weekly, Hilbert sorted, row groups of at most
+4 MiB. CRS84.
+
+- Reference layers, full attributes: `geoconnex/latest/reference/<layer>.parquet`
+  - `mainstems`: 852,673 rivers, each one line from head to outlet.
+    `uri`, `primary_name`, `name_at_outlet`, `lengthkm`,
+    `outlet_drainagearea_sqkm`, `downstream_mainstem_id` (the river it
+    flows into, empty at the sea), `superseded` (filter it out), NHDPlus
+    and HUC12 ids at head and outlet. Names repeat (two Colorado Rivers):
+    pick by drainage area or place.
+  - `gages` (203,525), `dams` (98,534, USACE National Inventory of Dams):
+    `uri`, `name`, `mainstem_uri` (the river they sit on, set for about
+    half the gages and 21% of dams), drainage areas, NHDPlus reach, `provider`.
+  - `hu02`, `hu04`, `hu06`, `hu08`, `hu10`, `hu12`: watersheds, `huc`,
+    `name`, `uri`. A HUC12 starts with its HU10, HU08... code.
+  - `principal_aquifers`, `national_aquifers`, `hydrogeologic_regions`.
+  - `water_systems`: public water system service areas, `pwsid`, `name`.
+- Features published by data providers, one file per source:
+  `geoconnex/latest/providers/<source>.parquet`, columns `uri`, `name`,
+  `description`, `mainstem_uri`.
+  - `epa_wqp`: 2.87 million Water Quality Portal sites (EPA, USGS, states).
+  - `usgs_monitoring_locations`: 1.74 million USGS sites (stream gages,
+    wells, lakes...). Most also appear in `epa_wqp`.
+  - `usgs_gnis` (names), `usgs_national_geologic_map` (map units,
+    polygons), and state and western water sources (`iow_state_gages_*`,
+    `wwdh_snotel`, `wwdh_usbr_rise`...). The list: `providers/_manifest.json`.
+- Every `uri` resolves at geoconnex.us to the feature's page and the data
+  published about it: give it in answers.
+- Versions: `geoconnex/latest/_source.json` (Geoconnex export date, rivers
+  release).
+- Licence: CC0. No attribution required; credit "Geoconnex, Internet of
+  Water" and the agency of the source (USGS, USACE, EPA).
 
 ## OpenStreetMap: US, Canada, Mexico
 

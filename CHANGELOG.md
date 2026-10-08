@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### reference-data
+
+- Geoconnex (Internet of Water), the sixth dataset: US rivers head to outlet
+  and their network, dams, gages, watersheds, aquifers, water systems, and
+  4.6 million water monitoring sites. Two tested recipes: along a river
+  (dams on the Colorado and its tributaries, by walking the network
+  upstream) and water monitoring sites near a point.
+- Fix: the nearest-features recipe measured distances with lon and lat
+  swapped (`ST_Distance_Sphere` reads lat, lon unless
+  `geometry_always_xy` is set) and returned 2,779 substations within 5 km
+  of central Lyon instead of 3,555.
+- Faster: computed bbox bounds are cast to FLOAT. Compared with DOUBLE
+  bounds, DuckDB 1.5 casts the FLOAT `bbox` column and prunes no row
+  group: the nearest recipe drops from 10.9 s to 1.7 s, the length-in-area
+  recipe (380 kV lines in Lombardy) from 157 s to 16 s. Documented as a
+  rule in both skills.
+
 ## 0.2.1 (2026-10-06)
 
 First tagged release.

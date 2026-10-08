@@ -27,8 +27,9 @@ not general knowledge:
 - *How many km of 380 kV line cross Lombardy?*
 - *Which substations are within 5 km of this site?*
 - *Add the country, district and flood zone to my list of 300 sites.*
+- *Which dams are on the Colorado River and its tributaries?*
 
-The agent turns the question into a spatial query over five open datasets
+The agent turns the question into a spatial query over six open datasets
 published by Geomermaids on [parquetry](https://geoparquet.geomermaids.com),
 runs it with DuckDB straight from the URLs, and answers with the number,
 the definitions it chose, the coverage, the data dates and the credits.
@@ -41,6 +42,7 @@ parts of the GeoParquet files the question needs.
 | [GMWID](https://gmwid.geomermaids.com) | World | Power, telecoms, oil and gas, water infrastructure |
 | [FEMA NFHL](https://nfhl.geomermaids.com) | United States | 100-year and 500-year flood zones, updated daily |
 | [CORINE Land Cover 2018](https://parquetry.geomermaids.com/clc/) | Europe | Land cover and land use, 44 classes |
+| [Geoconnex](https://parquetry.geomermaids.com/geoconnex/) | United States | Rivers and their network, dams, gages, watersheds, aquifers, water monitoring sites |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 
 ## Writing GeoParquet
@@ -87,7 +89,8 @@ skills/reference-data/
   SKILL.md                 the method: definitions, coverage, efficient reads, CRS, answer
   reference/datasets.md    layout, columns, value domains, licences of each dataset
   reference/recipes.md     tested queries: point context, area composition,
-                           overlay count, length in area, nearest, tagging, per-unit stats
+                           overlay count, length in area, nearest, along a river,
+                           water sites, tagging, per-unit stats
   reference/osm-regions.csv  the 98 OpenStreetMap regions
   scripts/locate.py        everything the datasets say about one lon/lat
 skills/write-geoparquet/
@@ -117,7 +120,7 @@ up here first.
 The data keeps its own licences, listed in `reference/datasets.md`:
 OpenStreetMap and GMWID under ODbL ("(c) OpenStreetMap contributors"),
 GAUL under CC BY 4.0 (FAO), CORINE under the Copernicus licence (EEA),
-NFHL in the public domain (FEMA). The skill tells the agent to credit each
+NFHL in the public domain (FEMA), Geoconnex under CC0 (Internet of Water). The skill tells the agent to credit each
 dataset it uses.
 
 The skill itself is MIT licensed.
