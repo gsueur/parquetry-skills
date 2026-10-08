@@ -72,6 +72,10 @@ the rules below by hand and run the checks in "Verify" on the result.
   (the script's `BBOX` expression). A bbox that does not contain its
   geometry silently drops rows from every filtered query.
 - Declare it as the `covering` in the `geo` footer.
+- Tell readers to compare it with FLOAT values or literals. DuckDB 1.5
+  casts a FLOAT column compared with a DOUBLE and then prunes no row group:
+  a computed bound (`lon + dx`, a Python float parameter) is 5 to 10 times
+  slower than the same bound cast with `::FLOAT`.
 - **DuckDB 1.5.6 does not prune row groups from a spatial predicate on the
   geometry.** Measured on an NFHL county file: `ST_Intersects` alone took
   18 s, the same query with a bbox filter 1 s. Document in the dataset's

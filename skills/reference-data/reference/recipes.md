@@ -168,14 +168,19 @@ SELECT geometry AS geom
 FROM read_parquet('https://parquetry.geomermaids.com/gaul/2024/country=ITA/L1.parquet')
 WHERE gaul1_name ILIKE 'Lombard%';
 SET VARIABLE ext = (SELECT ST_Extent_Agg(geom) FROM aoi);
+-- GMWID's bbox is FLOAT: FLOAT bounds keep row-group pruning (see datasets.md).
+SET VARIABLE x0 = (ST_XMin(getvariable('ext')) - 1e-4)::FLOAT;
+SET VARIABLE x1 = (ST_XMax(getvariable('ext')) + 1e-4)::FLOAT;
+SET VARIABLE y0 = (ST_YMin(getvariable('ext')) - 1e-4)::FLOAT;
+SET VARIABLE y1 = (ST_YMax(getvariable('ext')) + 1e-4)::FLOAT;
 
 SELECT l.voltage_kv,
        round(sum(ST_Length(ST_Transform(ST_Intersection(l.geometry, a.geom),
                                         'OGC:CRS84', 'EPSG:3035'))) / 1000) AS km
 FROM read_parquet('https://parquetry.geomermaids.com/gmwid/latest/power_line.parquet') l, aoi a
 WHERE l.country = 'IT'
-  AND l.bbox.xmin <= ST_XMax(getvariable('ext')) AND l.bbox.xmax >= ST_XMin(getvariable('ext'))
-  AND l.bbox.ymin <= ST_YMax(getvariable('ext')) AND l.bbox.ymax >= ST_YMin(getvariable('ext'))
+  AND l.bbox.xmin <= getvariable('x1') AND l.bbox.xmax >= getvariable('x0')
+  AND l.bbox.ymin <= getvariable('y1') AND l.bbox.ymax >= getvariable('y0')
   AND l.voltage_kv >= 100 AND l.lifecycle = 'active'
   AND ST_Intersects(l.geometry, a.geom)
 GROUP BY l.voltage_kv ORDER BY l.voltage_kv DESC;
@@ -199,16 +204,22 @@ SET VARIABLE km = 5;
 -- Degrees of padding: latitude is about 111 km per degree, longitude less.
 SET VARIABLE dy = getvariable('km') / 111.0;
 SET VARIABLE dx = getvariable('km') / (111.0 * cos(radians(getvariable('lat'))));
+-- The bounds as FLOAT, like the bbox column, widened by 1e-4 degree so the
+-- rounding never cuts a feature off. Compared with a DOUBLE, DuckDB casts
+-- the column and skips no row group: 10.9 s instead of 1.7 s here.
+SET VARIABLE x0 = (getvariable('lon') - getvariable('dx') - 1e-4)::FLOAT;
+SET VARIABLE x1 = (getvariable('lon') + getvariable('dx') + 1e-4)::FLOAT;
+SET VARIABLE y0 = (getvariable('lat') - getvariable('dy') - 1e-4)::FLOAT;
+SET VARIABLE y1 = (getvariable('lat') + getvariable('dy') + 1e-4)::FLOAT;
 
+SET geometry_always_xy = true;
 SELECT * FROM (
   SELECT name, operator, voltage_kv, origin,
          round(ST_Distance_Sphere(ST_Centroid(geometry),
                                   ST_Point(getvariable('lon'), getvariable('lat')))) AS metres
   FROM read_parquet('https://parquetry.geomermaids.com/gmwid/latest/power_substation.parquet')
-  WHERE bbox.xmin <= getvariable('lon') + getvariable('dx')
-    AND bbox.xmax >= getvariable('lon') - getvariable('dx')
-    AND bbox.ymin <= getvariable('lat') + getvariable('dy')
-    AND bbox.ymax >= getvariable('lat') - getvariable('dy'))
+  WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+    AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0'))
 WHERE metres <= getvariable('km') * 1000
 ORDER BY metres;
 ```
@@ -218,6 +229,94 @@ Near a city this returns every distribution substation: add
 transmission grid only. `ST_Distance_Sphere` takes points. For lines and polygons, measure in a
 projected CRS: `ST_Distance(ST_Transform(geometry, 'OGC:CRS84', 'EPSG:3035'), ...)`
 in Europe, the UTM zone elsewhere.
+
+## Along a river
+
+"Which dams are on the Colorado River, and on its tributaries?" Geoconnex
+mainstems are whole rivers, head to outlet, each linked to the river it
+flows into (`downstream_mainstem_id`). Dams and gages carry the
+`mainstem_uri` of the river they sit on. Find the river by name, walk the
+network upstream, then join.
+
+<!-- test: river-network -->
+```sql
+INSTALL httpfs; LOAD httpfs;
+SET VARIABLE river = 'Colorado River';
+
+-- Several rivers share a name: list them and pick by size or place.
+SELECT uri, primary_name, lengthkm, outlet_drainagearea_sqkm
+FROM read_parquet('https://parquetry.geomermaids.com/geoconnex/latest/reference/mainstems.parquet')
+WHERE primary_name = getvariable('river') AND NOT superseded
+ORDER BY outlet_drainagearea_sqkm DESC LIMIT 5;
+-- The Colorado of the Southwest (2,138 km, 557,743 km2), not the Texas one.
+SET VARIABLE outlet = 'https://geoconnex.us/ref/mainstems/29559';
+
+-- The network: four columns of 853,000 rivers, about 10 s.
+CREATE TABLE net AS
+SELECT uri, downstream_mainstem_id AS down, primary_name, lengthkm
+FROM read_parquet('https://parquetry.geomermaids.com/geoconnex/latest/reference/mainstems.parquet')
+WHERE NOT superseded;
+CREATE TABLE basin AS
+WITH RECURSIVE up(uri) AS (
+  SELECT getvariable('outlet')
+  UNION
+  SELECT n.uri FROM net n JOIN up ON n.down = up.uri)
+SELECT * FROM up;
+
+SELECT d.name, n.primary_name AS river, round(d.drainage_area_sqkm) AS drainage_km2,
+       d.mainstem_uri = getvariable('outlet') AS on_main_river, d.uri
+FROM read_parquet('https://parquetry.geomermaids.com/geoconnex/latest/reference/dams.parquet') d
+JOIN basin b ON d.mainstem_uri = b.uri
+JOIN net n ON n.uri = d.mainstem_uri
+ORDER BY on_main_river DESC, drainage_km2 DESC NULLS LAST;
+```
+
+406 dams on the Colorado's network, 17 on the main river (Morelos, Hoover,
+Glen Canyon...). Only dams and gages that Geoconnex placed on a mainstem
+carry `mainstem_uri`: about 21% of dams and half the gages. For every dam
+in a basin whether it sits on a mapped river or not, use the watershed
+polygons instead (`hu02` to `hu12`, by `huc` prefix) and a point-in-polygon
+test.
+
+## Water monitoring sites near a point
+
+"Where is water quality measured near this site?" The Water Quality Portal
+(EPA, USGS and states) and USGS monitoring locations, one file each. Every
+`uri` resolves at geoconnex.us to the site's page and its data.
+
+<!-- test: water-sites -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET geometry_always_xy = true;
+SET VARIABLE lon = -71.0490;
+SET VARIABLE lat = 42.3480;
+SET VARIABLE km = 2;
+SET VARIABLE x0 = (getvariable('lon') - getvariable('km') / (111.0 * cos(radians(getvariable('lat')))) - 1e-4)::FLOAT;
+SET VARIABLE x1 = (getvariable('lon') + getvariable('km') / (111.0 * cos(radians(getvariable('lat')))) + 1e-4)::FLOAT;
+SET VARIABLE y0 = (getvariable('lat') - getvariable('km') / 111.0 - 1e-4)::FLOAT;
+SET VARIABLE y1 = (getvariable('lat') + getvariable('km') / 111.0 + 1e-4)::FLOAT;
+
+CREATE TABLE sites AS
+SELECT 'Water Quality Portal' AS source, uri, name, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/geoconnex/latest/providers/epa_wqp.parquet')
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0')
+UNION ALL
+SELECT 'USGS monitoring location', uri, name, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/geoconnex/latest/providers/usgs_monitoring_locations.parquet')
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0');
+
+SELECT source, name, round(ST_Distance_Sphere(geometry, ST_Point(getvariable('lon'), getvariable('lat')))) AS metres, uri
+FROM sites
+WHERE ST_Distance_Sphere(geometry, ST_Point(getvariable('lon'), getvariable('lat'))) <= getvariable('km') * 1000
+ORDER BY metres;
+```
+
+Boston Inner Harbor: 24 sites within 2 km, about 5 s. A USGS site usually
+appears in both files (the WQP copy has `NWIS/USGS-<id>` in its `uri`, the
+USGS one `monitoring-location/USGS-<id>`): count distinct site numbers
+when the question is "how many".
 
 ## Tag a list of points
 

@@ -1,11 +1,11 @@
 ---
 name: reference-data
-description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
+description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
 ---
 
 # Spatial questions with the parquetry reference datasets
 
-Five open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
+Six open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
 You query them in place with DuckDB over HTTP range requests: no download
 step, no account, no API. Most questions combine two or three of them: an
 area from one, a phenomenon from another, the features to count from a
@@ -24,6 +24,7 @@ credit.
 | **GMWID** | World | Power lines, substations, plants, generators, towers; telecom cables and masts; pipelines, wells, platforms; water plants. | CRS84 | `gmwid/latest/<layer>.parquet`, one world file per layer |
 | **FEMA NFHL** | US (50 states, PR) | Flood zones: 1% annual chance (100-year), 0.2% (500-year), floodway, base flood elevation. | **EPSG:4269** | `nfhl/latest/state=<XX>/<DFIRM_ID>.parquet`, one per county delivery, indexed by `nfhl/latest/counties.parquet` |
 | **CORINE Land Cover 2018** | Europe (EEA39) | Land cover and land use composition, 44 classes, 25 ha minimum unit. | **EPSG:3035** | `clc/2018/country=<ISO2>/clc_2018.parquet`, or `clc/2018/clc_2018.parquet` |
+| **Geoconnex** (Internet of Water) | US | Rivers head to outlet and their network, stream gages, dams, watersheds HU02 to HU12, aquifers, water systems; 4.6 million water monitoring sites (Water Quality Portal, USGS). | CRS84 | `geoconnex/latest/reference/<layer>.parquet`, `geoconnex/latest/providers/<source>.parquet` |
 | **OpenStreetMap** | US, Canada, Mexico | Buildings, roads, railways, POIs, amenities, places, land use, water, boundaries, power, public transport, updated daily. | CRS84 | `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet` |
 
 Read `reference/datasets.md` for columns, value domains and licences
@@ -83,6 +84,8 @@ Write the definitions before the SQL, and state them in the answer.
   thinner in rural areas.
 - GMWID: worldwide, but it is OSM plus authoritative sources. Report
   `origin` when it matters.
+- Geoconnex: only some dams and gages carry the river they sit on
+  (`mainstem_uri`): say so when you count along a river.
 
 ### 3. Read only what the question needs
 
@@ -130,6 +133,8 @@ two worked examples below. Adapt the closest one:
 | Nearest features | "Substations within 5 km of this site" |
 | Tag a list of points | "Add country, district and flood zone to my 300 sites" |
 | Per-unit statistics | "Wind farm capacity per French région" |
+| Along a river | "Dams on the Colorado and its tributaries" |
+| Water monitoring sites | "Where is water quality measured near this site?" |
 
 For a single location, `scripts/locate.py <lon> <lat>` returns the admin
 units, flood zone, land cover class, OSM region and nearest power
@@ -151,7 +156,8 @@ Give, in this order:
 3. Coverage and gaps (counties without FEMA data, the OSM completeness
    caveat).
 4. The data dates: the FEMA `fema_update_date` per delivery, the OSM
-   snapshot date (`osm/snapshots.json`), CORINE 2018, GAUL 2024.
+   snapshot date (`osm/snapshots.json`), CORINE 2018, GAUL 2024, the
+   Geoconnex export date (`geoconnex/latest/_source.json`).
 5. The credit for each dataset used, from `reference/datasets.md`.
 
 Offer the SQL you ran, so the person can rerun or adjust it.
@@ -162,8 +168,12 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   file in about 2 s. For many points across countries, find the countries
   from the L0 boxes first (under 1 s, no geometry read), then read only
   their files, as in the tag-points recipe.
-- `ST_Transform` without `SET geometry_always_xy = true` reads EPSG:4326
-  as lat, lon and puts the point in the wrong place without an error.
+- `ST_Transform` and `ST_Distance_Sphere` without `SET geometry_always_xy = true`
+  read lon/lat as lat, lon and give wrong results without an error.
+- Compare `bbox` with literals or `::FLOAT` values, never computed DOUBLEs:
+  DuckDB then casts the FLOAT column and skips no row group (10.9 s
+  instead of 1.7 s for the nearest-substation recipe). See
+  `reference/datasets.md`.
 - NFHL rows are pieces of zones, cut to at most 100 vertices. Count zones
   with `count(*) FILTER (WHERE piece_id = 0)`, and use `DISTINCT` when you
   count features that touch pieces, since one building can touch several.

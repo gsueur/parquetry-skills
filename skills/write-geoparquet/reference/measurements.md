@@ -31,6 +31,22 @@ sorted), one point:
 DuckDB 1.5.6 does not use the native GEOMETRY row-group statistics to
 prune a spatial predicate. The explicit `bbox` filter is what prunes.
 
+## FLOAT bbox against DOUBLE bounds
+
+The same bbox filter, DuckDB 1.5.6, remote, FLOAT `bbox` columns:
+
+| File | Bounds | Time |
+|---|---|---|
+| Geoconnex `epa_wqp` (113 groups) | literals (DECIMAL) | 1.8 s |
+| | `::DOUBLE` | 19.1 s |
+| | `::FLOAT` | 2.9 s |
+| GMWID `power_substation`, 5 km around Lyon | `lon + dx` (DOUBLE) | 10.9 s |
+| | `(lon + dx)::FLOAT` | 1.7 s |
+
+Compared with a DOUBLE, the FLOAT column is cast and its statistics are
+not used. FLOAT keeps the column half the size; the rule for readers is to
+cast computed bounds, widened by 1e-4 degree against rounding.
+
 ## Compression
 
 | Level | Size versus level 3 | Write time | Reads |
