@@ -40,6 +40,33 @@
 - A Portolan/STAC catalog makes the dataset findable and machine-readable.
   The `portolan` skills (`portolan-bootstrap`, `register-catalog`) cover it.
   Validate with `rashid`.
+- A PMTiles archive beside the file for maps: `pmtiles.md`.
+
+## Catalog extents that cross the antimeridian
+
+A plain min/max of longitudes turns data on both sides of 180 degrees
+(Alaska's Aleutians, Guam, American Samoa, Fiji) into a box around the
+whole world: `[-179.2, ..., 179.9, ...]`. Readers take it for "global",
+and a registry map centred the OSM North America marker on France, the
+box's centre. STAC writes such a box with west > east:
+`[172.4, 14.5, -52.6, 83.3]`.
+
+Compute it from the data, not from the file's min/max:
+
+1. Collect the longitude intervals the rows cover, from the `bbox` column.
+   A row whose box is wider than 180 degrees is a multipolygon with parts
+   on both sides: `ST_Dump` it and take each part's interval.
+2. Merge intervals closer than about 1 degree, so a few thousand islands
+   become a few intervals.
+3. The extent is the circle minus its largest empty arc. When that arc
+   does not contain 180, write west > east.
+4. Clamp to [-180, 180]: a FLOAT `bbox` rounded outward can overshoot by
+   1e-4.
+
+A catalog-level extent is the same operation over the collections' boxes,
+each box with west > east read as two intervals. A dataset whose rows each
+span the world (a global footprint) yields the world: leave those rows out
+when they would hide the real extent, and say so in the description.
 
 ## Mistakes we made
 
@@ -53,3 +80,18 @@
   Patch the footer or rewrite deliberately.
 - An index whose geometry was the file's bounding rectangle, documented as
   the outline. Readers placed points in the wrong county near borders.
+- A download that was an HTML page. census.gov's firewall answers a
+  rejected request with a small "Request Rejected" page and **HTTP 200**,
+  so `curl -f` passes. Check the bytes (a zip starts with `PK`, a
+  GeoPackage with `SQLite format 3`), retry with a pause, then fail
+  loudly.
+- A Cloudflare Worker in front of R2 passed the browser's `If-None-Match`
+  value to R2's `onlyIf` as a string, quotes included, and answered 500 to
+  every revalidation. Files loaded once, then the PMTiles maps broke on
+  reload. Pass the request headers object (`onlyIf: request.headers`), and
+  read an R2 object without `body` as a failed condition: 304 for
+  `If-None-Match`, 412 otherwise. Test a conditional range request
+  (`curl -H 'If-None-Match: "<etag>"' -r 0-99`) after any change to the
+  Worker.
+- Collection extents computed as a plain min/max: a catalog for North
+  America declared the whole world (see the antimeridian section above).

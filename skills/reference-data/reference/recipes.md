@@ -52,6 +52,49 @@ WHERE bbox.xmin <= getvariable('lon') AND bbox.xmax >= getvariable('lon')
 An empty `nfhl` list, or no row from the last query, means no FEMA
 delivery maps the point: report "unmapped", not "no flood risk".
 
+## Election districts
+
+"Which districts do I vote in at this address?" The US House, State
+Senate and State House districts of the November 2026 elections, about
+3 s. The files are NAD83: an untagged `ST_Point` compares with them
+directly, but cast with `geometry::GEOMETRY` to join them with CRS84 data.
+
+<!-- test: election-districts -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = -97.7431;
+SET VARIABLE lat = 30.2672;
+
+CREATE TABLE d AS
+SELECT 'US House' AS chamber, NAMELSAD AS district, GEOID, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2026/legislative/cd120.parquet')
+WHERE bbox.xmin <= getvariable('lon') AND bbox.xmax >= getvariable('lon')
+  AND bbox.ymin <= getvariable('lat') AND bbox.ymax >= getvariable('lat')
+UNION ALL
+SELECT 'State Senate', NAMELSAD, GEOID, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2026/legislative/sldu.parquet')
+WHERE bbox.xmin <= getvariable('lon') AND bbox.xmax >= getvariable('lon')
+  AND bbox.ymin <= getvariable('lat') AND bbox.ymax >= getvariable('lat')
+UNION ALL
+SELECT 'State House', NAMELSAD, GEOID, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2026/legislative/sldl.parquet')
+WHERE bbox.xmin <= getvariable('lon') AND bbox.xmax >= getvariable('lon')
+  AND bbox.ymin <= getvariable('lat') AND bbox.ymax >= getvariable('lat');
+
+SELECT chamber, district, GEOID FROM d
+WHERE ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')));
+```
+
+Austin city hall: Congressional District 10, State Senate District 14,
+State House District 49. A `ZZ` or `ZZZ` code means no district there
+(usually water). Nebraska has no State House row: its one chamber is in
+`sldu`. To say whether the US House district changed since 2024, look the
+`GEOID` up under `districts` in
+`https://census.geomermaids.com/redistricting.json`: the overlap (IoU)
+with its closest 2024 district, 1.0 when unchanged. Only the ten redrawn
+states are listed there. TX-10 (`4810`) scores 0.26: it was largely
+redrawn.
+
 ## Composition of an area
 
 "What is the predominant land use in Hérault, France?" The département is
@@ -92,6 +135,55 @@ FROM lc GROUP BY 1 ORDER BY pct DESC;
 Check the total against the area (`ST_Area(geom)` in `aoi`): CORINE
 covers land and inland water fully, so a gap above a few percent means a
 filter went wrong.
+
+## Land cover of a large area, from H3 cells
+
+For a whole country or a large region, the polygon recipe reads and
+clips millions of polygons: on all of Spain it ran out of memory on a
+laptop. The H3 table answers the level-1 group shares from resolution 7
+cells (5.2 km2): Spain in about 4 s, Hérault in 1 s (forest 49.2 %,
+agriculture 39.0 %, where the polygons say 49.3 % and 39.1 %).
+
+<!-- test: h3-composition -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+INSTALL h3 FROM community; LOAD h3;
+
+CREATE TABLE aoi AS
+SELECT geometry AS geom
+FROM read_parquet('https://parquetry.geomermaids.com/gaul/2024/country=FRA/L2.parquet')
+WHERE gaul2_name = 'Hérault';
+
+-- The resolution 7 cells whose centre is in the area. The H3 function
+-- takes polygons, not multipolygons: dump the parts first. Simplifying the
+-- outline to about 500 m first barely changes the cells (Spain: 95,535
+-- against 95,518) and takes 48 s down to under 1 s.
+CREATE TABLE cells AS
+SELECT DISTINCT h3_h3_to_string(unnest(h3_polygon_wkb_to_cells(ST_AsWKB(p.geom), 7))) AS h3
+FROM (SELECT unnest(ST_Dump(ST_SimplifyPreserveTopology(geom, 0.005))) AS p FROM aoi);
+
+CREATE TABLE lc AS
+SELECT c.*
+FROM read_parquet('https://parquetry.geomermaids.com/clc/2018/clc_2018_h3.parquet') c
+JOIN cells USING (h3)
+WHERE c.h3_res = 7;
+
+-- Shares weighted by how much of each cell CORINE covers. The _pct
+-- columns are UTINYINT: cast before multiplying.
+SELECT count(*) AS cells,
+       round(sum(forest_pct::INT * coverage_pct) / sum(coverage_pct), 1) AS forest,
+       round(sum(agricultural_pct::INT * coverage_pct) / sum(coverage_pct), 1) AS agricultural,
+       round(sum(artificial_pct::INT * coverage_pct) / sum(coverage_pct), 1) AS artificial,
+       round(sum(wetland_pct::INT * coverage_pct) / sum(coverage_pct), 1) AS wetland,
+       round(sum(water_pct::INT * coverage_pct) / sum(coverage_pct), 1) AS water
+FROM lc;
+```
+
+The cells give the group shares, and per cell only the dominant class:
+`SELECT label, count(*) FROM lc GROUP BY 1 ORDER BY 2 DESC` counts cells
+by dominant class, not area by class. For a class share (vineyards), and
+for areas smaller than a few hundred km2, use the polygon recipe above.
+For a country, read its L0 file: `country=ESP/L0_derived.parquet`.
 
 ## Overlay count
 

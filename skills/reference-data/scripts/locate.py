@@ -7,7 +7,8 @@
     uv run locate.py <lon> <lat> [--radius-km 2]
 
 Prints JSON: the administrative units (FAO GAUL 2024, worldwide), the FEMA
-flood zone (United States), the CORINE land cover class (Europe), the
+flood zone (United States), the 2026 election districts (Census TIGER/Line,
+United States), the CORINE land cover class (Europe), the
 OpenStreetMap region file (US, Canada, Mexico) and the nearest power
 infrastructure (GMWID, worldwide). Each block names its source, the date of
 the data and the credit to give. A block is null when the dataset does not
@@ -47,6 +48,11 @@ CLC_ISO2 = {
 }
 OSM_COUNTRY = {"USA": "US", "PRI": "US", "VIR": "US", "CAN": "CA", "MEX": "MX"}
 NFHL_ISO3 = {"USA", "PRI"}
+CENSUS_ISO3 = {"USA", "PRI", "VIR", "GUM", "ASM", "MNP"}
+# TIGER layer, its district code column, the chamber.
+DISTRICTS = [("cd120", "CD120FP", "us_house"),
+             ("sldu", "SLDUST", "state_senate"),
+             ("sldl", "SLDLST", "state_house")]
 
 
 def connect():
@@ -125,6 +131,26 @@ def flood(con, lon, lat):
         "source": "FEMA National Flood Hazard Layer",
         "credit": "FEMA National Flood Hazard Layer, public domain. Not for official "
                   "flood zone determinations.",
+    }
+
+
+def districts(con, lon, lat):
+    # NAD83 files: an untagged point compares with them directly. ZZ / ZZZ
+    # codes are TIGER's placeholders where no district is defined.
+    out = {}
+    for layer, code, chamber in DISTRICTS:
+        hit = rows(con, f"""
+            SELECT NAMELSAD AS district, GEOID AS geoid, {code} AS code
+            FROM read_parquet('{BASE}/census/tiger/2026/legislative/{layer}.parquet')
+            WHERE {bbox_hit(lon, lat)}
+              AND ST_Intersects(geometry, ST_Point({lon}, {lat}))
+            LIMIT 1""")
+        out[chamber] = hit[0] if hit and not hit[0]["code"].startswith("ZZ") else None
+    return {
+        **out,
+        "source": "U.S. Census Bureau, TIGER/Line 2026 (districts of the November 2026 elections)",
+        "credit": "U.S. Census Bureau, TIGER/Line 2026, public domain. Boundaries are "
+                  "statistical, not legal descriptions.",
     }
 
 
@@ -250,6 +276,7 @@ def main():
     result["admin"] = adm
     iso3 = adm["iso3_code"] if adm else None
     result["flood"] = flood(con, a.lon, a.lat) if iso3 in NFHL_ISO3 else None
+    result["districts"] = districts(con, a.lon, a.lat) if iso3 in CENSUS_ISO3 else None
     result["land_cover"] = (land_cover(con, a.lon, a.lat, CLC_ISO2[iso3])
                             if iso3 in CLC_ISO2 else None)
     result["osm"] = osm_region(adm) if adm else None

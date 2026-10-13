@@ -1,11 +1,11 @@
 ---
 name: reference-data
-description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
+description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
 ---
 
 # Spatial questions with the parquetry reference datasets
 
-Six open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
+Seven open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
 You query them in place with DuckDB over HTTP range requests: no download
 step, no account, no API. Most questions combine two or three of them: an
 area from one, a phenomenon from another, the features to count from a
@@ -23,14 +23,18 @@ credit.
 | **GAUL 2024** (FAO) | World | Areas of interest: countries (L0), states and regions (L1), districts, counties, départements (L2). Point to admin unit. | CRS84 | `gaul/2024/country=<ISO3>/L0_derived,L1,L2.parquet`, or one world file per level |
 | **GMWID** | World | Power lines, substations, plants, generators, towers; telecom cables and masts; pipelines, wells, platforms; water plants. | CRS84 | `gmwid/latest/<layer>.parquet`, one world file per layer |
 | **FEMA NFHL** | US (50 states, PR) | Flood zones: 1% annual chance (100-year), 0.2% (500-year), floodway, base flood elevation. | **EPSG:4269** | `nfhl/latest/state=<XX>/<DFIRM_ID>.parquet`, one per county delivery, indexed by `nfhl/latest/counties.parquet` |
-| **CORINE Land Cover 2018** | Europe (EEA39) | Land cover and land use composition, 44 classes, 25 ha minimum unit. | **EPSG:3035** | `clc/2018/country=<ISO2>/clc_2018.parquet`, or `clc/2018/clc_2018.parquet` |
+| **CORINE Land Cover 2018** | Europe (EEA39) | Land cover and land use composition, 44 classes, 25 ha minimum unit. Group shares on H3 cells for large areas. | **EPSG:3035** | `clc/2018/country=<ISO2>/clc_2018.parquet`, or `clc/2018/clc_2018.parquet`; `clc/2018/clc_2018_h3.parquet` |
 | **Geoconnex** (Internet of Water) | US | Rivers head to outlet and their network, stream gages, dams, watersheds HU02 to HU12, aquifers, water systems; 4.6 million water monitoring sites (Water Quality Portal, USGS). | CRS84 | `geoconnex/latest/reference/<layer>.parquet`, `geoconnex/latest/providers/<source>.parquet` |
+| **Census TIGER/Line 2026** | US | Election districts of November 2026: US House (120th Congress), State Senates, State Houses. The states redrawn since 2024. | **EPSG:4269** | `census/tiger/2026/legislative/cd120,sldu,sldl.parquet`, one national file each |
 | **OpenStreetMap** | US, Canada, Mexico | Buildings, roads, railways, POIs, amenities, places, land use, water, boundaries, power, public transport, updated daily. | CRS84 | `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet` |
 
 Read `reference/datasets.md` for columns, value domains and licences
 before writing a query against a dataset you have not used in this
 session. Each collection also publishes an agent guide with its full
 column list: `https://parquetry.geomermaids.com/<dataset>/catalog/<collection>/AGENTS.md`.
+
+For a map, use the PMTiles archives of GAUL, CORINE and Census with
+MapLibre, not the Parquet files: `reference/datasets.md`, "Maps".
 
 Outside these footprints, say so. Do not answer a land-cover question
 about Texas from CORINE, or a building count for France from OSM here.
@@ -86,6 +90,8 @@ Write the definitions before the SQL, and state them in the answer.
   `origin` when it matters.
 - Geoconnex: only some dams and gages carry the river they sit on
   (`mainstem_uri`): say so when you count along a river.
+- Census: US states, DC, Puerto Rico and the territories. Nebraska has no
+  State House: its one chamber is in the State Senate file.
 
 ### 3. Read only what the question needs
 
@@ -97,6 +103,9 @@ Write the definitions before the SQL, and state them in the answer.
   on a file without a bbox filter.
 - Select only the columns you need: the geometry column is most of the
   bytes.
+- For land cover shares over a whole country or a large region, start
+  from the CORINE H3 cells: seconds, where clipping the polygons can run
+  out of memory, and within half a point of them for the level-1 groups.
 - Materialize the filtered inputs into local tables (`CREATE TABLE ... AS`)
   before a spatial join. DuckDB then joins in memory with its R-tree
   spatial join instead of fetching remote pages repeatedly.
@@ -107,10 +116,10 @@ Write the definitions before the SQL, and state them in the answer.
 
 ### 4. Align the coordinate systems
 
-- GAUL, GMWID and OSM are CRS84 lon/lat. NFHL is NAD83 lon/lat
-  (EPSG:4269). The two differ by about 1 m in the US: cast the NFHL
-  geometry with `geometry::GEOMETRY` to drop the CRS tag and join them
-  directly.
+- GAUL, GMWID, Geoconnex and OSM are CRS84 lon/lat. NFHL and Census are
+  NAD83 lon/lat (EPSG:4269). The two differ by 1 to 2 m in the US: cast
+  the NFHL or Census geometry with `geometry::GEOMETRY` to drop the CRS
+  tag and join them directly.
 - CORINE is EPSG:3035 (metres). Transform the area of interest into 3035
   with `ST_Transform(geom, 'OGC:CRS84', 'EPSG:3035')`. Never transform the
   CORINE polygons, which are many and large.
@@ -127,7 +136,9 @@ two worked examples below. Adapt the closest one:
 | Pattern | Example question |
 |---|---|
 | Point to context | "Which county and flood zone is this address in?" |
+| Point to election districts | "Which districts do I vote in at this address?" |
 | Composition of an area | "Predominant land use in Hérault" |
+| Land cover of a large area | "How much of Spain is forest?" |
 | Overlay count | "Buildings in the 100-year floodplain in Eastern Massachusetts" |
 | Length or area inside an area | "Km of power lines over 100 kV in Lombardy" |
 | Nearest features | "Substations within 5 km of this site" |
@@ -137,8 +148,8 @@ two worked examples below. Adapt the closest one:
 | Water monitoring sites | "Where is water quality measured near this site?" |
 
 For a single location, `scripts/locate.py <lon> <lat>` returns the admin
-units, flood zone, land cover class, OSM region and nearest power
-infrastructure in one call:
+units, flood zone, election districts, land cover class, OSM region and
+nearest power infrastructure in one call:
 
 ```bash
 uv run scripts/locate.py -71.0490 42.3480 --radius-km 2
@@ -157,7 +168,8 @@ Give, in this order:
    caveat).
 4. The data dates: the FEMA `fema_update_date` per delivery, the OSM
    snapshot date (`osm/snapshots.json`), CORINE 2018, GAUL 2024, the
-   Geoconnex export date (`geoconnex/latest/_source.json`).
+   Geoconnex export date (`geoconnex/latest/_source.json`), TIGER/Line
+   2026 (`census/_source.json`).
 5. The credit for each dataset used, from `reference/datasets.md`.
 
 Offer the SQL you ran, so the person can rerun or adjust it.
@@ -184,5 +196,11 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   4 wetlands, 5 water.
 - NFHL is not an official flood zone determination. Say so whenever you
   report a flood zone for a property.
+- TIGER codes `ZZ`/`ZZZ` (no district) and `98` (non-voting delegates)
+  are placeholders, not districts: filter them out before counting.
+  `00` is a real at-large district.
+- A catalog extent with west > east crosses the antimeridian (Alaska,
+  Guam): it is not the whole world. Split it in two before using it as a
+  filter.
 - GAUL L0 (`L0_derived`) is dissolved by Geomermaids from L1, not
   published by FAO, and GAUL boundaries carry the UN disclaimer.

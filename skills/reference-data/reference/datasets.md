@@ -8,9 +8,10 @@ glob needs.
 Every file has a `bbox` struct column (`xmin`, `ymin`, `xmax`, `ymax`),
 declared as the GeoParquet covering, and is sorted along a Hilbert curve.
 Filter on `bbox` first. The geometry column is native Parquet `GEOMETRY`.
+One exception: the CORINE H3 table is keyed by cell, without `bbox`.
 
-The `bbox` fields are FLOAT in GAUL, GMWID, OpenStreetMap and Geoconnex
-(DOUBLE in NFHL and CORINE). Compare them with literals or FLOAT values:
+The `bbox` fields are FLOAT in GAUL, GMWID, OpenStreetMap, Geoconnex and
+Census (DOUBLE in NFHL and CORINE). Compare them with literals or FLOAT values:
 a DOUBLE bound (any computed value, any Python float passed as a
 parameter) makes DuckDB 1.5 cast the column and skip no row group, 5 to
 10 times slower. Cast computed bounds with `::FLOAT`, widened by 1e-4
@@ -131,6 +132,38 @@ One world file per layer: `gmwid/latest/<layer>.parquet`. Rebuilt weekly.
 - Licence: Copernicus, full and open. Credit "(c) European Union,
   Copernicus Land Monitoring Service, European Environment Agency (EEA)".
 
+### CORINE on H3 cells
+
+`clc/2018/clc_2018_h3.parquet` (79 MB) summarizes CORINE on H3 cells of
+resolutions 3 to 7, for questions about large areas. Every resolution 9
+cell (about 0.1 km2) takes the class of the polygon holding its centre;
+each coarser cell counts its resolution 9 children.
+
+| `h3_res` | Cells | Cell area |
+|---|---|---|
+| 3 | 866 | 12,400 km2 |
+| 4 | 5,165 | 1,770 km2 |
+| 5 | 33,244 | 250 km2 |
+| 6 | 224,652 | 36 km2 |
+| 7 | 1,549,546 | 5.2 km2 |
+
+- Columns: `h3` (VARCHAR cell id), `h3_res`, `Code_18` (the dominant
+  class), `color`, `label`, `dominant_pct`, `artificial_pct`,
+  `agricultural_pct`, `forest_pct`, `wetland_pct`, `water_pct` (shares of
+  the CORINE-covered part of the cell, in percent), `coverage_pct` (how
+  much of the cell CORINE covers: low on coasts and borders), `geometry`
+  (the cell, CRS84).
+- Rows are sorted by `h3_res`, then `h3`: a filter on `h3_res` reads only
+  that resolution's row groups.
+- The `_pct` columns are UTINYINT. Cast them before multiplying
+  (`forest_pct::INT * coverage_pct`), or DuckDB overflows.
+- The level-1 group shares agree with the polygons within half a point
+  (Hérault: forest 49.2 % against 49.3 %). All of Spain takes about 4 s,
+  where clipping the polygons ran out of memory on a laptop. Per class, a
+  cell gives only its dominant class: for the share of vineyards, use the
+  polygons.
+- Needs the `h3` DuckDB community extension (`INSTALL h3 FROM community`).
+
 ### CORINE classes
 
 The first digit is the level-1 group: **1** artificial surfaces,
@@ -198,6 +231,42 @@ describes. Republished weekly, Hilbert sorted, row groups of at most
 - Licence: CC0. No attribution required; credit "Geoconnex, Internet of
   Water" and the agency of the source (USGS, USACE, EPA).
 
+## US Census TIGER/Line 2026: election districts
+
+The Census Bureau's 2026 Legislative Areas, the districts of the November
+2026 elections. One national file per layer, Hilbert sorted, row groups of
+at most 4 MiB. **NAD83 (EPSG:4269)**, like NFHL.
+
+| File | Rows | Districts |
+|---|---|---|
+| `census/tiger/2026/legislative/cd120.parquet` | 444 | US House, 120th Congress: 435 seats, 50 states, plus DC and the territories |
+| `census/tiger/2026/legislative/sldu.parquet` | 1,964 | State Senates (upper chambers), 50 states, DC, Puerto Rico |
+| `census/tiger/2026/legislative/sldl.parquet` | 4,879 | State Houses (lower chambers), 49 states and Puerto Rico. Nebraska's legislature has one chamber, in `sldu`. |
+
+- Columns are TIGER's, unchanged: `STATEFP` (state FIPS), the district
+  code (`CD120FP`, `SLDUST` or `SLDLST`), `GEOID` (state FIPS + code),
+  `GEOIDFQ` (for data.census.gov), `NAMELSAD` ("Congressional District
+  10", "State Senate District 14"), `LSAD`, `MTFCC`, `FUNCSTAT`, `ALAND`
+  and `AWATER` (m2), `INTPTLAT` and `INTPTLON` (an interior point, as
+  text), `bbox`, `geometry`.
+- Placeholders, not districts: `ZZ` or `ZZZ` (no district defined, often
+  water) and, in `cd120`, `98` (the non-voting delegates of DC and the
+  territories). Leave them out of counts:
+  `WHERE CD120FP NOT LIKE 'ZZ%' AND CD120FP <> '98'`. `00` is a real
+  at-large district (Alaska, Delaware, North Dakota, South Dakota,
+  Vermont, Wyoming).
+- State FIPS to postal code: `census/tiger/2026/legislative/_manifest.json`,
+  under `states`, with each state's bounds.
+- Maps redrawn since the 2024 elections: census.geomermaids.com compares
+  these districts with the 119th Congress ones (TIGER 2025). Ten states
+  changed (TN, UT, CA, OH, LA, MO, TX, AL, FL, NC); Iowa could not be
+  compared. `https://census.geomermaids.com/redistricting.json` lists them
+  (`redrawn`), and gives under `districts`, by `GEOID`, the overlap (IoU)
+  of each of their new districts with its closest old one.
+- Licence: public domain (US Government work). Credit "U.S. Census
+  Bureau, TIGER/Line 2026". Boundaries are statistical, not legal
+  descriptions. Full text: `census/tiger/2026/legislative/ATTRIBUTION.txt`.
+
 ## OpenStreetMap: US, Canada, Mexico
 
 - Files: `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet`, for
@@ -222,3 +291,40 @@ describes. Republished weekly, Hilbert sorted, row groups of at most
   Full lists: `osm/catalog/<theme>/AGENTS.md`.
 - A feature crossing a state border is in both files.
 - Licence: ODbL 1.0. Credit "(c) OpenStreetMap contributors".
+
+## Maps: PMTiles archives
+
+When the answer is a map, draw it from a PMTiles archive with MapLibre and
+the `pmtiles` protocol, not from the Parquet files. The archives sit next
+to the data and answer range requests:
+
+| Archive | Source layer | Zooms | Properties |
+|---|---|---|---|
+| `gaul/2024/GAUL_2024_L0_derived.pmtiles` (63 MB) | `l0_derived` | 0-10 | all |
+| `gaul/2024/GAUL_2024_L1.pmtiles` (94 MB) | `l1` | 0-10 | all |
+| `gaul/2024/GAUL_2024_L2.pmtiles` (178 MB) | `l2` | 3-10 | `iso3_code`, `gaul1_name`, `gaul2_code`, `gaul2_name`, `continent` |
+| `clc/2018/clc_2018.pmtiles` (2.2 GB) | `cells` z0-8 (H3 cells, as in the H3 table), `clc_2018` z9-12 (polygons) | 0-12 | `Code_18`, `color`, `label`, and the cell shares |
+| `census/tiger/2026/legislative/<cd120, sldu, sldl>.pmtiles` | `cd120`, `sldu`, `sldl` | 0-12 | `STATEFP`, the district code, `GEOID`, `NAMELSAD`, `ALAND`, `AWATER`, `color_index` |
+
+- CORINE features carry their official colour: `["get", "color"]` draws
+  the legend with no lookup table.
+- Census districts carry `color_index` (0 to 5), chosen so that no two
+  neighbouring districts share it: map it to a six-colour palette.
+- Each Portolan collection also publishes ready MapLibre styles
+  (`styles/default.json` and others) that point at the archive.
+- A quick look without code: `https://geoparquet.geomermaids.com/viewer.html?url=<file URL>`
+  opens a Parquet file or an archive.
+
+## Portolan catalogs
+
+Every dataset has a STAC catalog (Portolan profile):
+`https://parquetry.geomermaids.com/<dataset>/catalog/catalog.json` for
+`gaul`, `gmwid`, `nfhl`, `clc`, `geoconnex`, `census` and `osm`. Each
+collection links its files, its PMTiles archive, its styles and an
+`AGENTS.md`.
+
+A collection extent that crosses the antimeridian is written the STAC
+way, with west > east: `[172.4, 14.5, -52.6, 83.3]` is North America
+including the Aleutians, not the world minus North America. Read such a
+box as two ranges, [west, 180] and [-180, east], and split it the same
+way before filtering a `bbox` column with it.
