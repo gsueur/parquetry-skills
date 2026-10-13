@@ -4,6 +4,31 @@
 
 ### reference-data
 
+- Census TIGER/Line 2026, the seventh dataset: US House, State Senate and
+  State House districts of the November 2026 elections, and the states
+  redrawn since 2024. A tested recipe (election districts at a point), and
+  `locate.py` returns the three districts for US points.
+- CORINE on H3 cells (`clc_2018_h3.parquet`): land cover group shares of a
+  whole country in seconds. A tested recipe: all of Spain in about 4 s,
+  where clipping the polygons ran out of memory; Hérault within half a
+  point of the polygons.
+- Maps: the PMTiles archives of GAUL, CORINE and Census, their layers and
+  the properties that carry the styling (`color`, `color_index`).
+- Catalogs: how to read a collection extent with west > east (crossing
+  the antimeridian), now published for Census, Geoconnex and OSM.
+
+### write-geoparquet
+
+- `reference/pmtiles.md`: a PMTiles archive beside the GeoParquet with
+  tylertoo, the settings that keep a coverage without holes, failing on
+  oversized tiles, styling in the tiles, and H3 aggregation for layers too
+  dense for the small zooms (how the CORINE archive is built).
+- Publishing: catalog extents that cross the antimeridian, computed from
+  the data; two new mistakes (an HTML error page served with HTTP 200,
+  and a Worker that answered 500 to conditional requests).
+- Fix: `write_geoparquet.py` relabelled NAD83 (EPSG:4269) data as CRS84.
+  It now keeps any CRS other than WGS84, as the NFHL and Census files do.
+
 - Geoconnex (Internet of Water), the sixth dataset: US rivers head to outlet
   and their network, dams, gages, watersheds, aquifers, water systems, and
   4.6 million water monitoring sites. Two tested recipes: along a river

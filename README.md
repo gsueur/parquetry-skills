@@ -28,8 +28,9 @@ not general knowledge:
 - *Which substations are within 5 km of this site?*
 - *Add the country, district and flood zone to my list of 300 sites.*
 - *Which dams are on the Colorado River and its tributaries?*
+- *Which congressional and state legislative districts do I vote in?*
 
-The agent turns the question into a spatial query over six open datasets
+The agent turns the question into a spatial query over seven open datasets
 published by Geomermaids on [parquetry](https://geoparquet.geomermaids.com),
 runs it with DuckDB straight from the URLs, and answers with the number,
 the definitions it chose, the coverage, the data dates and the credits.
@@ -41,8 +42,9 @@ parts of the GeoParquet files the question needs.
 | [FAO GAUL 2024](https://parquetry.geomermaids.com/gaul/) | World | Countries, regions, districts: the areas questions are about |
 | [GMWID](https://gmwid.geomermaids.com) | World | Power, telecoms, oil and gas, water infrastructure |
 | [FEMA NFHL](https://nfhl.geomermaids.com) | United States | 100-year and 500-year flood zones, updated daily |
-| [CORINE Land Cover 2018](https://parquetry.geomermaids.com/clc/) | Europe | Land cover and land use, 44 classes |
+| [CORINE Land Cover 2018](https://parquetry.geomermaids.com/clc/) | Europe | Land cover and land use, 44 classes, and on H3 cells for large areas |
 | [Geoconnex](https://parquetry.geomermaids.com/geoconnex/) | United States | Rivers and their network, dams, gages, watersheds, aquifers, water monitoring sites |
+| [Census TIGER/Line 2026](https://census.geomermaids.com) | United States | Congressional and state legislative districts of the 2026 elections |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 
 ## Writing GeoParquet
@@ -53,7 +55,10 @@ GEOMETRY, a bbox covering column, Hilbert order, row groups capped by bytes
 (DuckDB will not write them under 2,048 rows, so pyarrow and geoarrow cut
 them), optional subdivision of heavy polygons, partitioning with a
 manifest, and a verification of every file. Each rule comes with the
-measurement behind it, from building these datasets.
+measurement behind it, from building these datasets. It also covers the
+PMTiles archive for maps (tiler settings, styling in the tiles, H3 cells
+for layers too dense to tile) and catalog extents that cross the
+antimeridian.
 
 ```
 uv run skills/write-geoparquet/scripts/write_geoparquet.py zones.gpkg zones.parquet --make-valid --subdivide 100
@@ -120,7 +125,8 @@ up here first.
 The data keeps its own licences, listed in `reference/datasets.md`:
 OpenStreetMap and GMWID under ODbL ("(c) OpenStreetMap contributors"),
 GAUL under CC BY 4.0 (FAO), CORINE under the Copernicus licence (EEA),
-NFHL in the public domain (FEMA), Geoconnex under CC0 (Internet of Water). The skill tells the agent to credit each
-dataset it uses.
+NFHL in the public domain (FEMA), Geoconnex under CC0 (Internet of
+Water), TIGER/Line in the public domain (US Census Bureau). The skill
+tells the agent to credit each dataset it uses.
 
 The skill itself is MIT licensed.

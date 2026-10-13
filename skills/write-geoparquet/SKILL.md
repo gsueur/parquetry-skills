@@ -1,6 +1,6 @@
 ---
 name: write-geoparquet
-description: Write optimized GeoParquet files that read fast over HTTP, the way the Geomermaids parquetry datasets are built. Use when converting vector data (Shapefile, GeoPackage, GeoJSON, FlatGeobuf, PostGIS export, plain Parquet) to GeoParquet, when publishing a dataset to object storage for DuckDB, GDAL or browser readers, when a GeoParquet file is slow to query remotely, or when choosing row groups, sorting, compression, partitioning, CRS handling or polygon subdivision. Covers GeoParquet 2.0 with native Parquet GEOMETRY, the bbox covering column, Hilbert sorting, byte-capped row groups, verification and hosting headers.
+description: Write optimized GeoParquet files that read fast over HTTP, the way the Geomermaids parquetry datasets are built. Use when converting vector data (Shapefile, GeoPackage, GeoJSON, FlatGeobuf, PostGIS export, plain Parquet) to GeoParquet, when publishing a dataset to object storage for DuckDB, GDAL or browser readers, when a GeoParquet file is slow to query remotely, or when choosing row groups, sorting, compression, partitioning, CRS handling or polygon subdivision. Also use when adding a PMTiles archive for web maps beside a GeoParquet file (tylertoo settings, styling properties, H3 aggregation of dense coverages) or computing a catalog extent that crosses the antimeridian. Covers GeoParquet 2.0 with native Parquet GEOMETRY, the bbox covering column, Hilbert sorting, byte-capped row groups, verification, hosting headers, PMTiles and STAC extents.
 ---
 
 # Writing optimized GeoParquet
@@ -11,7 +11,8 @@ a per-row bounding box the reader filters on, row groups small enough that
 skipping them matters, and a footer that says so correctly.
 
 Each rule comes from measurements on the parquetry datasets (OSM North
-America, GMWID, FAO GAUL, FEMA NFHL, CORINE). The numbers are in
+America, GMWID, FAO GAUL, FEMA NFHL, CORINE, Geoconnex, Census
+TIGER/Line). The numbers are in
 `reference/measurements.md`.
 
 ## Quick path
@@ -58,6 +59,10 @@ the rules below by hand and run the checks in "Verify" on the result.
 - Lon/lat data: leave the GEOMETRY type untagged. Untagged means OGC:CRS84
   (lon, lat) by the spec. EPSG:4326 declares lat, lon axis order, which is
   not what the bytes hold.
+- Other geographic CRSs (NAD83, EPSG:4269, for FEMA and Census data):
+  keep the tag and the source's CRS. Do not relabel it CRS84 in the
+  GeoParquet, even though the difference is 1 to 2 m: readers that join
+  across CRSs should decide to drop the tag themselves.
 - Projected data: keep the tag (`ST_SetCRS(geom, 'EPSG:3035')`) and put the
   PROJJSON in the `geo` footer. DuckDB has no function that returns
   PROJJSON. Write a one-point probe file with `GEOPARQUET_VERSION 'V2'` and
@@ -169,3 +174,10 @@ mistakes we made. In short:
 - Ship an `AGENTS.md` and a README that tell readers the layout, the CRS,
   the `bbox` filter rule and the licence. A Portolan/STAC catalog makes the
   dataset findable: the `portolan` skills cover that.
+- Compute the catalog extent from the data: data on both sides of 180
+  degrees needs a box with west > east, never a min/max that spans the
+  world (`reference/publishing.md`).
+- For maps, add a PMTiles archive per layer beside the Parquet file:
+  `reference/pmtiles.md` has the tiler settings that keep a coverage
+  without holes, styling in the tiles, and H3 aggregation for layers too
+  dense for the small zooms.

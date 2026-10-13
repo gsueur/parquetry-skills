@@ -15,8 +15,9 @@ What it does, in order:
      --subdivide vertices (with a piece_id column),
   2. a per-row `bbox` struct (FLOAT, rounded outward), sorted along a Hilbert
      curve over the data's extent,
-  3. native Parquet GEOMETRY with the CRS: lon/lat is left untagged (OGC:CRS84
-     by definition), a projected CRS is kept, and a GeoParquet 2.0 `geo` footer
+  3. native Parquet GEOMETRY with the CRS: WGS84 lon/lat is left untagged
+     (OGC:CRS84 by definition), any other CRS is kept (projected, or another
+     datum such as NAD83, EPSG:4269), and a GeoParquet 2.0 `geo` footer
      declares the bbox column as the covering,
   4. row groups capped by bytes (--group-mib, default about 16 groups per
      file, 0.25 to 8 MiB each) with pyarrow + geoarrow, because
@@ -41,7 +42,7 @@ from pathlib import Path
 
 import duckdb
 
-LONLAT = {None, "", "EPSG:4326", "OGC:CRS84", "CRS84", "EPSG:4269"}
+LONLAT = {None, "", "EPSG:4326", "OGC:CRS84", "CRS84"}
 TYPE_NAMES = {
     "POINT": "Point", "LINESTRING": "LineString", "POLYGON": "Polygon",
     "MULTIPOINT": "MultiPoint", "MULTILINESTRING": "MultiLineString",
