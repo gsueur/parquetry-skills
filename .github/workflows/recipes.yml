@@ -39,7 +39,7 @@ jobs:
           test -f out_fra/_manifest.json
           # projected CRS (EPSG:3035), subdivided: the CRS must survive the rewrite
           uv run $S "https://parquetry.geomermaids.com/clc/2018/country=LU/clc_2018.parquet" out_lu.parquet --subdivide 256
-          uv run --with duckdb python -c "import duckdb; duckdb.sql(\"INSTALL spatial; LOAD spatial\"); t = duckdb.sql(\"SELECT any_value(typeof(geometry)), max(ST_NPoints(geometry)) FROM read_parquet('out_lu.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:3035')\", 256), t"
+          uv run --with duckdb python -c "import duckdb; duckdb.execute(\"INSTALL spatial; LOAD spatial\"); t = duckdb.execute(\"SELECT any_value(typeof(geometry)), max(ST_NPoints(geometry)) FROM read_parquet('out_lu.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:3035')\", 256), t"
           # NAD83 (EPSG:4269), geographic but not WGS84: the tag must survive too
           uv run $S "https://parquetry.geomermaids.com/census/tiger/2026/legislative/cd120.parquet" out_cd.parquet
-          uv run --with duckdb python -c "import duckdb; duckdb.sql(\"INSTALL spatial; LOAD spatial\"); t = duckdb.sql(\"SELECT any_value(typeof(geometry)), count(*) FROM read_parquet('out_cd.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:4269')\", 444), t"
+          uv run --with duckdb python -c "import duckdb; duckdb.execute(\"INSTALL spatial; LOAD spatial\"); t = duckdb.execute(\"SELECT any_value(typeof(geometry)), count(*) FROM read_parquet('out_cd.parquet')\").fetchone(); assert t == (\"GEOMETRY('EPSG:4269')\", 444), t"
