@@ -271,8 +271,9 @@ at most 4 MiB. **NAD83 (EPSG:4269)**, like NFHL.
 
 - Files: `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet`, for
   example `osm/latest/country=US/state=US-MA/buildings.parquet`. The 98
-  regions are in `reference/osm-regions.csv`. Rebuilt nightly, and
-  `latest/` is the only version. Build date: `osm/snapshots.json`.
+  regions are in `reference/osm-regions.csv`. Rebuilt nightly. The
+  first build of each month is kept for 12 months under `osm/<YYYY-MM-DD>/`:
+  `osm/snapshots.json` gives the build date and lists them.
 - A whole theme: `s3://parquetry/osm/latest/country=*/state=*/<theme>.parquet`.
 - Themes: `buildings`, `roads`, `railways`, `waterways`, `water`,
   `landuse`, `natural_areas`, `natural_features`, `places`, `boundaries`,
