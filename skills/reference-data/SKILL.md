@@ -167,7 +167,7 @@ Give, in this order:
 3. Coverage and gaps (counties without FEMA data, the OSM completeness
    caveat).
 4. The data dates: the FEMA `fema_update_date` per delivery, the OSM
-   snapshot date (`osm/snapshots.json`), CORINE 2018, GAUL 2024, the
+   build date (`osm/snapshots.json`), CORINE 2018, GAUL 2024, the
    Geoconnex export date (`geoconnex/latest/_source.json`), TIGER/Line
    2026 (`census/_source.json`).
 5. The credit for each dataset used, from `reference/datasets.md`.
