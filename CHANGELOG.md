@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0 (2026-11-07)
+
+### reference-data
+
+- Three datasets, ten in all:
+  - Census ACS 2020-2024: 33 measures with their margins of error by
+    state, county, place, tract, block group and ZIP code area, as tables
+    keyed by `GEOID` and joined to the TIGER/Line outlines.
+  - FEMA National Risk Index 1.20: risk of 18 natural hazards by tract,
+    county, state and tribal area, with FEMA's scores and ratings.
+  - Natural Earth 5.1.2: world countries, states, places, coastlines,
+    rivers, lakes, ports, airports and time zones at three scales.
+- Three tested recipes:
+  - Population near a point: ACS tracts by centroid, counts with combined
+    margins, a population-weighted income. About 1 s.
+  - Natural hazard risk at a point: the NRI tract, its composite and its
+    five highest hazards through `UNPIVOT`. About 1.5 s.
+  - Largest places near a point, from Natural Earth. Under 1 s.
+- Pitfalls: ACS margins and medians, NRI scores against ratings (a tract
+  can score 95 for wildfire and be rated "Relatively Moderate"), Natural
+  Earth's `-99` ISO codes and populations.
+- Maps: the PMTiles archives of ACS, NRI and Natural Earth (one per file,
+  and Natural Earth's basemaps), with their layers and styling.
+- Catalogs: `nri`, `natural-earth`, ACS under `census`, and
+  catalog.geomermaids.com, the root that links them all.
+- OSM: `latest/` is the only rolling version, and the first build of each
+  month is kept for 12 months under `osm/<YYYY-MM-DD>/` (#7, #8).
+
+### Tests
+
+- CI reads the CRS checks through `execute()`: DuckDB 2.0 dropped
+  `Relation.fetchone()` (#6).
+
 ## 0.3.0 (2026-10-13)
 
 ### reference-data
