@@ -186,6 +186,9 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   their files, as in the tag-points recipe.
 - `ST_Transform` and `ST_Distance_Sphere` without `SET geometry_always_xy = true`
   read lon/lat as lat, lon and give wrong results without an error.
+- Filter on `bbox` before any spatial predicate. `ST_Intersects` alone
+  reads every geometry of the file: a point lookup on the NRI tracts
+  (494 MB) times out at 60 s without it and takes 2.5 s with it.
 - Compare `bbox` with literals or `::FLOAT` values, never computed DOUBLEs:
   DuckDB then casts the FLOAT column and skips no row group (10.9 s
   instead of 1.7 s for the nearest-substation recipe). See
