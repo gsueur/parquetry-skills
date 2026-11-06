@@ -1,11 +1,11 @@
 ---
 name: reference-data
-description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
+description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
 ---
 
 # Spatial questions with the parquetry reference datasets
 
-Seven open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
+Ten open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
 You query them in place with DuckDB over HTTP range requests: no download
 step, no account, no API. Most questions combine two or three of them: an
 area from one, a phenomenon from another, the features to count from a
@@ -26,6 +26,9 @@ credit.
 | **CORINE Land Cover 2018** | Europe (EEA39) | Land cover and land use composition, 44 classes, 25 ha minimum unit. Group shares on H3 cells for large areas. | **EPSG:3035** | `clc/2018/country=<ISO2>/clc_2018.parquet`, or `clc/2018/clc_2018.parquet`; `clc/2018/clc_2018_h3.parquet` |
 | **Geoconnex** (Internet of Water) | US | Rivers head to outlet and their network, stream gages, dams, watersheds HU02 to HU12, aquifers, water systems; 4.6 million water monitoring sites (Water Quality Portal, USGS). | CRS84 | `geoconnex/latest/reference/<layer>.parquet`, `geoconnex/latest/providers/<source>.parquet` |
 | **Census TIGER/Line 2026** | US | Election districts of November 2026: US House (120th Congress), State Senates, State Houses. The states redrawn since 2024. | **EPSG:4269** | `census/tiger/2026/legislative/cd120,sldu,sldl.parquet`, one national file each |
+| **Census ACS 2020-2024** | US | Population, age, households, income, poverty, home value, rent, tenure, race and Hispanic origin, education, commuting, each with its margin of error. Join to TIGER on `GEOID`. | **EPSG:4269** | `census/acs/2024/<geo>.parquet` (table) and `<geo>_geo.parquet` (with outlines), geo = state, county, place, tract, bg, zcta520 |
+| **FEMA National Risk Index 1.20** | US | Risk of 18 natural hazards: expected annual loss, social vulnerability, community resilience, composite risk. Scores and ratings per hazard. | CRS84 | `nri/v1.20/tracts,counties,states,tribal_counties.parquet`; `TRACTFIPS`, `STCOFIPS` join TIGER `GEOID` |
+| **Natural Earth 5.1.2** | World | Countries, states and provinces, populated places with population, urban areas, airports, ports, time zones, coastline, land, ocean, rivers, lakes. Small-scale context and labels. | CRS84 | `natural-earth/v5.1.2/<10m, 50m, 110m>/<layer>.parquet` |
 | **OpenStreetMap** | US, Canada, Mexico | Buildings, roads, railways, POIs, amenities, places, land use, water, boundaries, power, public transport, updated daily. | CRS84 | `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet` |
 
 Read `reference/datasets.md` for columns, value domains and licences
@@ -33,7 +36,8 @@ before writing a query against a dataset you have not used in this
 session. Each collection also publishes an agent guide with its full
 column list: `https://parquetry.geomermaids.com/<dataset>/catalog/<collection>/AGENTS.md`.
 
-For a map, use the PMTiles archives of GAUL, CORINE and Census with
+For a map, use the PMTiles archives of GAUL, CORINE, Census (TIGER and
+ACS), NRI and Natural Earth with
 MapLibre, not the Parquet files: `reference/datasets.md`, "Maps".
 
 Outside these footprints, say so. Do not answer a land-cover question
@@ -204,3 +208,12 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   filter.
 - GAUL L0 (`L0_derived`) is dissolved by Geomermaids from L1, not
   published by FAO, and GAUL boundaries carry the UN disclaimer.
+- ACS values are estimates. Report the `_moe` with them, and do not call a
+  difference smaller than the margins real. Medians (income, age, rent)
+  never add up across areas; counts do.
+- An NRI score is a national percentile among areas of the same level,
+  and the rating is FEMA's own class: a tract can score 95 for wildfire
+  and be rated "Relatively Moderate". Quote both, and compare tracts with
+  tracts. States have no composite rating: use `EAL_RATNG`.
+- Natural Earth `ISO_A2` is `-99` for France and Norway, among others:
+  join countries on `ISO_A2_EH`, `ISO_A3_EH` or `ADM0_A3`.

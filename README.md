@@ -29,8 +29,10 @@ not general knowledge:
 - *Add the country, district and flood zone to my list of 300 sites.*
 - *Which dams are on the Colorado River and its tributaries?*
 - *Which congressional and state legislative districts do I vote in?*
+- *How many people live within 5 km of my sites, and what do they earn?*
+- *Which natural hazards threaten this site most?*
 
-The agent turns the question into a spatial query over seven open datasets
+The agent turns the question into a spatial query over ten open datasets
 published by Geomermaids on [parquetry](https://geoparquet.geomermaids.com),
 runs it with DuckDB straight from the URLs, and answers with the number,
 the definitions it chose, the coverage, the data dates and the credits.
@@ -45,6 +47,9 @@ parts of the GeoParquet files the question needs.
 | [CORINE Land Cover 2018](https://parquetry.geomermaids.com/clc/) | Europe | Land cover and land use, 44 classes, and on H3 cells for large areas |
 | [Geoconnex](https://parquetry.geomermaids.com/geoconnex/) | United States | Rivers and their network, dams, gages, watersheds, aquifers, water monitoring sites |
 | [Census TIGER/Line 2026](https://census.geomermaids.com) | United States | Congressional and state legislative districts of the 2026 elections |
+| [Census ACS 2020-2024](https://parquetry.geomermaids.com/census/acs/2024/) | United States | Population, income, poverty, housing, education and commuting by state, county, place, tract, block group and ZIP code area |
+| [FEMA National Risk Index](https://parquetry.geomermaids.com/nri/) | United States | Risk of 18 natural hazards by tract and county: expected loss, social vulnerability, resilience |
+| [Natural Earth](https://parquetry.geomermaids.com/natural-earth/) | World | Countries, states, cities with population, coastlines, rivers, lakes, ports, airports, at three scales |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 
 ## Writing GeoParquet

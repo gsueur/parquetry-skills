@@ -267,6 +267,118 @@ at most 4 MiB. **NAD83 (EPSG:4269)**, like NFHL.
   Bureau, TIGER/Line 2026". Boundaries are statistical, not legal
   descriptions. Full text: `census/tiger/2026/legislative/ATTRIBUTION.txt`.
 
+## US Census ACS 2020-2024: population, income, housing
+
+The American Community Survey 5-year estimates for 2020-2024, from the
+Census Bureau's Summary File: 33 measures, each with its 90 percent margin
+of error in `<measure>_moe`. Two files per geography:
+
+| File | Rows | Geometry |
+|---|---|---|
+| `census/acs/2024/state.parquet`, `state_geo.parquet` | 52 | outline in `_geo` |
+| `census/acs/2024/county.parquet`, `county_geo.parquet` | 3,222 | |
+| `census/acs/2024/place.parquet`, `place_geo.parquet` | 32,330 (32,304 with an outline) | |
+| `census/acs/2024/tract.parquet`, `tract_geo.parquet` | 85,382 | |
+| `census/acs/2024/bg.parquet`, `bg_geo.parquet` | 242,297 (block groups) | |
+| `census/acs/2024/zcta520.parquet`, `zcta520_geo.parquet` | 33,772 (ZIP code areas) | |
+
+- `<geo>.parquet` is the table alone, sorted by `GEOID`: a state or county
+  prefix (`WHERE GEOID LIKE '25025%'`) reads few row groups.
+  `<geo>_geo.parquet` adds TIGER/Line 2026's outline, `ALAND`, `AWATER`,
+  `bbox` and `geometry`, **NAD83 (EPSG:4269)** like TIGER.
+- Keys: `GEOID` (TIGER's identifier: state 2, county 5, tract 11, block
+  group 12 digits, place 7, ZCTA 5), `NAME`, `STUSAB` (postal code).
+- Measures: `population`, `median_age`, `households`,
+  `median_household_income`, `per_capita_income`, `poverty_universe`,
+  `below_poverty`, `poverty_rate`, `median_home_value`,
+  `median_gross_rent`, `housing_units`, `vacant_units`, `vacancy_rate`,
+  `occupied_units`, `owner_occupied`, `renter_occupied`,
+  `owner_occupied_rate`, `hispanic_or_latino` and seven
+  `<race>_not_hispanic` groups, `population_25_and_over`,
+  `bachelors_or_higher`, `bachelors_or_higher_rate`, `workers`,
+  `transit_commuters`, `transit_share`, `commuters_outside_home`,
+  `mean_travel_time`. Rates are percent, 0 to 100. Each column's
+  description in the catalog gives its ACS variable code.
+- NULL where the Census Bureau could not compute an estimate (too few
+  cases). Top codes mean "this much or more": income 250001, home value
+  2000001, rent 3501. `mean_travel_time` is NULL for block groups (not
+  published at that level).
+- Counts add up across areas, with a MOE of `sqrt(sum(moe ^ 2))`.
+  Medians do not: weight them by population, and say so.
+- Known gap in the source: 14 tracts and 39 block groups of Suffolk County,
+  NY are missing from the Summary File, though the county row counts
+  their 77,579 people.
+- Licence: public domain (US Government work). Credit "U.S. Census
+  Bureau, American Community Survey 2020-2024 5-year estimates".
+
+## FEMA National Risk Index 1.20: natural hazard risk, United States
+
+FEMA's National Risk Index, version 1.20 (December 2025), from OpenFEMA.
+One file per level, **CRS84** (FEMA ships Web Mercator; reprojected):
+
+| File | Rows | Key |
+|---|---|---|
+| `nri/v1.20/tracts.parquet` | 85,154 | `TRACTFIPS`, joins TIGER and ACS tract `GEOID` |
+| `nri/v1.20/counties.parquet` | 3,232 | `STCOFIPS`, joins county `GEOID` |
+| `nri/v1.20/states.parquet` | 56 | `STATEFIPS` |
+| `nri/v1.20/tribal_counties.parquet` | 1,232 | `NRI_ID` (tribe `AIANNHCE`, `JURS_NAME`, county `STCOFIPS`) |
+| `nri/v1.20/hazards.parquet` | 18 | `Prefix` to `Hazard` name, period of record |
+
+- Columns are FEMA's names (468 for tracts). The composite:
+  `RISK_SCORE`, `RISK_RATNG`, `RISK_VALUE` (dollars a year); expected
+  annual loss `EAL_VALT` (total, dollars a year), `EAL_SCORE`,
+  `EAL_RATNG`; social vulnerability `SOVI_SCORE`, `SOVI_RATNG`; community
+  resilience `RESL_SCORE`, `RESL_RATNG`. Exposure: `POPULATION`,
+  `BUILDVALUE`, `AGRIVALUE`, `AREA` (square miles).
+- Per hazard, columns start with the hazard's prefix: `<P>_RISKS`
+  (score), `<P>_RISKR` (rating), `<P>_EALT` (expected annual loss),
+  `<P>_AFREQ` (annual frequency), `<P>_EXPT` (exposure). The 18 prefixes:
+  `AVLN` avalanche, `CFLD` coastal flooding, `CWAV` cold wave, `DRGT`
+  drought, `ERQK` earthquake, `HAIL` hail, `HWAV` heat wave, `HRCN`
+  hurricane, `ISTM` ice storm, `LNDS` landslide, `LTNG` lightning, `IFLD`
+  inland flooding, `SWND` strong wind, `TRND` tornado, `TSUN` tsunami,
+  `VLCN` volcanic activity, `WFIR` wildfire, `WNTW` winter weather.
+- Scores are national percentiles (0 to 100) among areas of the same
+  level. Ratings are FEMA's classes: `Very Low`, `Relatively Low`,
+  `Relatively Moderate`, `Relatively High`, `Very High`, plus
+  `No Rating`, `Insufficient Data`, `Not Applicable`. A high score with a
+  moderate rating is normal: quote both.
+- States are rated on expected annual loss only: no `RISK_*`, `SOVI_*`
+  or `RESL_*` columns at that level.
+- The full dictionary: `nri/v1.20/NRIDataDictionary.csv`.
+- The NRI is a screening tool for comparing communities, not a
+  property-level assessment. Say so when you report it for a site.
+- Licence: public domain (US Government work). Credit "FEMA, National
+  Risk Index, version 1.20".
+
+## Natural Earth 5.1.2: world basemap layers
+
+Natural Earth's cultural and physical vectors at three scales, **CRS84**,
+Natural Earth's columns unchanged:
+`natural-earth/v5.1.2/<scale>/<layer>.parquet`.
+
+| Layer | 10m | 50m | 110m |
+|---|---|---|---|
+| `admin_0_countries`, `admin_1_states_provinces`, `populated_places`, `coastline`, `land`, `ocean`, `rivers_lake_centerlines`, `lakes`, `graticules_10` | yes | yes | yes |
+| `urban_areas` | yes | yes | |
+| `airports`, `ports`, `time_zones` | yes | | |
+
+- 10m (1:10 million) for analysis and labels; 50m and 110m for world and
+  continent maps.
+- `admin_1_states_provinces` covers every country at 10m only (9
+  countries at 50m, the US at 110m).
+- `populated_places`: `NAME`, `NAMEASCII`, `ADM0NAME`, `ADM0_A3`,
+  `ADM1NAME`, `FEATURECLA` (for example `Admin-0 capital`), `POP_MAX`,
+  `POP_MIN`, `SCALERANK` (0 most important), `LATITUDE`, `LONGITUDE`.
+  7,342 places at 10m, chosen for labels, not a complete list.
+  `POP_MAX` is `-99` when unknown: filter it out before ranking.
+- Countries: join on `ISO_A2_EH`, `ISO_A3_EH` or `ADM0_A3`. `ISO_A2` and
+  `ISO_A3` are `-99` for France, Norway and a few others.
+- Seven units cross the antimeridian (Fiji, Russia among them): their
+  `bbox` spans every longitude, so a box filter keeps them everywhere.
+  Test the geometry.
+- Licence: public domain. Credit "Made with Natural Earth".
+
 ## OpenStreetMap: US, Canada, Mexico
 
 - Files: `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet`, for
@@ -306,11 +418,23 @@ to the data and answer range requests:
 | `gaul/2024/GAUL_2024_L2.pmtiles` (178 MB) | `l2` | 3-10 | `iso3_code`, `gaul1_name`, `gaul2_code`, `gaul2_name`, `continent` |
 | `clc/2018/clc_2018.pmtiles` (2.2 GB) | `cells` z0-8 (H3 cells, as in the H3 table), `clc_2018` z9-12 (polygons) | 0-12 | `Code_18`, `color`, `label`, and the cell shares |
 | `census/tiger/2026/legislative/<cd120, sldu, sldl>.pmtiles` | `cd120`, `sldu`, `sldl` | 0-12 | `STATEFP`, the district code, `GEOID`, `NAMELSAD`, `ALAND`, `AWATER`, `color_index` |
+| `census/acs/2024/<geo>_geo.pmtiles` | `acs_<geo>` | state, county 0-12; place, zcta520 6-12; tract 7-12; bg 10-12 | state: every measure. County, place, ZCTA: `GEOID`, `NAME`, `population`, `median_household_income` and its MOE, `poverty_rate`. Tract, bg: `GEOID`, `median_household_income` |
+| `nri/v1.20/<level>.pmtiles` | `tracts`, `counties`, `states`, `tribal_counties` | tracts 7-12, counties and states 0-10, tribal 0-12 | the key, the ratings (`RISK_RATNG`; `EAL_RATNG` for states) and their scores |
+| `natural-earth/v5.1.2/<scale>/<layer>.pmtiles` | the layer name | 10m 0-8 (admin-1, places, airports 1-8), 50m 0-5, 110m 0-3 | all, but only the naming columns for 10m admin-1 and places and for 50m places |
+| `natural-earth/v5.1.2/<scale>/basemap.pmtiles` | `ne`, every layer, told apart by `ne_layer` | as above | as above |
 
 - CORINE features carry their official colour: `["get", "color"]` draws
   the legend with no lookup table.
 - Census districts carry `color_index` (0 to 5), chosen so that no two
   neighbouring districts share it: map it to a six-colour palette.
+- ACS styles colour `median_household_income` in fixed national classes
+  ($50k, 65k, 80k, 100k, 125k), so a colour means the same at every
+  geography; NRI styles colour the five rating classes. Below an
+  archive's first zoom, draw the coarser geography instead (counties
+  under tracts).
+- Natural Earth tiles stop at 85.05 degrees of latitude (web maps cannot
+  show more): the South Pole station is in the Parquet file, not the
+  tiles.
 - Each Portolan collection also publishes ready MapLibre styles
   (`styles/default.json` and others) that point at the archive.
 - A quick look without code: `https://geoparquet.geomermaids.com/viewer.html?url=<file URL>`
@@ -320,7 +444,10 @@ to the data and answer range requests:
 
 Every dataset has a STAC catalog (Portolan profile):
 `https://parquetry.geomermaids.com/<dataset>/catalog/catalog.json` for
-`gaul`, `gmwid`, `nfhl`, `clc`, `geoconnex`, `census` and `osm`. Each
+`gaul`, `gmwid`, `nfhl`, `clc`, `geoconnex`, `census` (TIGER/Line, and
+the ACS in its `acs-2024` sub-catalog), `nri`, `natural-earth` and `osm`.
+`https://catalog.geomermaids.com/catalog.json` is the root that links
+them all, with a browser for people. Each
 collection links its files, its PMTiles archive, its styles and an
 `AGENTS.md`.
 

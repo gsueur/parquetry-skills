@@ -475,3 +475,136 @@ GROUP BY r.gaul1_name ORDER BY mw DESC NULLS LAST;
 
 Report `farms_without_output`: OSM leaves the output of many plants
 blank, so the MW total is a floor, not the installed capacity.
+
+## Population near a point
+
+"How many people live within 5 km of this site, and what do they earn?"
+ACS tracts whose centroid is within the distance, about 1 s. Say that it
+counts whole tracts by their centroid; for a sharper figure use block
+groups (`bg_geo.parquet`) or weight each tract by the share of its area
+inside the circle.
+
+<!-- test: population-near-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = -71.0589;
+SET VARIABLE lat = 42.3601;
+SET VARIABLE km = 5;
+SET VARIABLE dy = getvariable('km') / 111.0;
+SET VARIABLE dx = getvariable('km') / (111.0 * cos(radians(getvariable('lat'))));
+-- FLOAT bounds, like the bbox column, so row groups are skipped.
+SET VARIABLE x0 = (getvariable('lon') - getvariable('dx') - 1e-4)::FLOAT;
+SET VARIABLE x1 = (getvariable('lon') + getvariable('dx') + 1e-4)::FLOAT;
+SET VARIABLE y0 = (getvariable('lat') - getvariable('dy') - 1e-4)::FLOAT;
+SET VARIABLE y1 = (getvariable('lat') + getvariable('dy') + 1e-4)::FLOAT;
+
+SET geometry_always_xy = true;
+CREATE TABLE t AS
+SELECT GEOID, NAME, population, population_moe, median_household_income,
+       ST_Distance_Sphere(ST_Centroid(geometry),
+                          ST_Point(getvariable('lon'), getvariable('lat'))) AS metres
+FROM read_parquet('https://parquetry.geomermaids.com/census/acs/2024/tract_geo.parquet')
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0');
+
+-- Tracts whose centroid is within the distance. Counts add up, and their
+-- MOE is the root of the summed squared MOEs; medians do not add up, so
+-- the income is weighted by the population of the tracts that have one.
+SELECT count(*) AS tracts,
+       sum(population) AS population,
+       round(sqrt(sum(population_moe ^ 2))) AS population_moe,
+       round(sum(median_household_income * population)
+             / sum(population) FILTER (WHERE median_household_income IS NOT NULL))
+         AS weighted_median_income
+FROM t
+WHERE metres <= getvariable('km') * 1000;
+```
+
+Boston City Hall, 5 km: 143 tracts, 446,386 people (margin 5,793), a
+population-weighted median household income of about $111,000. The
+weighted median is an approximation; a true median of the area needs the
+income distribution tables, which this dataset does not carry.
+
+## Natural hazard risk at a point
+
+"Which natural hazards threaten this site?" The NRI tract under the
+point, its composite rating and its five highest hazards, about 1.5 s.
+`UNPIVOT` turns the per-hazard columns (`<prefix>_RISKS`, `<prefix>_RISKR`)
+into rows, and `hazards.parquet` names the prefixes.
+
+<!-- test: hazard-risk-at-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = -121.6219;
+SET VARIABLE lat = 39.7596;
+SET VARIABLE x = getvariable('lon')::FLOAT;
+SET VARIABLE y = getvariable('lat')::FLOAT;
+
+CREATE TABLE tract AS
+SELECT * EXCLUDE (bbox, geometry)
+FROM read_parquet('https://parquetry.geomermaids.com/nri/v1.20/tracts.parquet')
+WHERE bbox.xmin <= getvariable('x') AND bbox.xmax >= getvariable('x')
+  AND bbox.ymin <= getvariable('y') AND bbox.ymax >= getvariable('y')
+  AND ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')));
+
+-- One row per hazard: <PREFIX>_RISKS is the score, <PREFIX>_RISKR the rating.
+CREATE TABLE per_hazard AS
+SELECT s.TRACTFIPS, split_part(s.col, '_', 1) AS prefix, s.score, r.rating
+FROM (UNPIVOT (SELECT TRACTFIPS, COLUMNS('^[A-Z]{4}_RISKS$') FROM tract)
+      ON COLUMNS('_RISKS$') INTO NAME col VALUE score) AS s
+JOIN (UNPIVOT (SELECT TRACTFIPS, COLUMNS('^[A-Z]{4}_RISKR$') FROM tract)
+      ON COLUMNS('_RISKR$') INTO NAME col VALUE rating) AS r
+  ON r.TRACTFIPS = s.TRACTFIPS AND split_part(r.col, '_', 1) = split_part(s.col, '_', 1);
+
+SELECT t.TRACTFIPS, t.COUNTY, t.STATEABBRV, t.RISK_RATNG, round(t.RISK_SCORE, 1) AS risk_score,
+       t.SOVI_RATNG, t.RESL_RATNG, h.Hazard, round(p.score, 1) AS hazard_score, p.rating
+FROM tract AS t
+JOIN per_hazard AS p USING (TRACTFIPS)
+JOIN read_parquet('https://parquetry.geomermaids.com/nri/v1.20/hazards.parquet') AS h
+  ON h.Prefix = p.prefix
+ORDER BY p.score DESC NULLS LAST
+LIMIT 5;
+```
+
+Paradise, California: composite risk "Relatively Low" (score 32.3), social
+vulnerability "Relatively High". Wildfire leads with a score of 95.2,
+rated "Relatively Moderate": the score is a national percentile among
+tracts, the rating FEMA's class, and both belong in the answer. For a
+county, read `counties.parquet` the same way with `STCOFIPS`.
+
+## Largest places near a point
+
+"What are the ten largest cities within 200 km?" Natural Earth's
+populated places, about 0.6 s.
+
+<!-- test: largest-places-near-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = 4.8357;
+SET VARIABLE lat = 45.7640;
+SET VARIABLE km = 200;
+SET VARIABLE dy = getvariable('km') / 111.0;
+SET VARIABLE dx = getvariable('km') / (111.0 * cos(radians(getvariable('lat'))));
+SET VARIABLE x0 = (getvariable('lon') - getvariable('dx') - 1e-4)::FLOAT;
+SET VARIABLE x1 = (getvariable('lon') + getvariable('dx') + 1e-4)::FLOAT;
+SET VARIABLE y0 = (getvariable('lat') - getvariable('dy') - 1e-4)::FLOAT;
+SET VARIABLE y1 = (getvariable('lat') + getvariable('dy') + 1e-4)::FLOAT;
+
+SET geometry_always_xy = true;
+SELECT * FROM (
+  SELECT NAME, ADM0NAME AS country, POP_MAX,
+         round(ST_Distance_Sphere(geometry, ST_Point(getvariable('lon'), getvariable('lat'))) / 1000)
+           AS km
+  FROM read_parquet('https://parquetry.geomermaids.com/natural-earth/v5.1.2/10m/populated_places.parquet')
+  WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+    AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0'))
+WHERE km <= getvariable('km')
+ORDER BY POP_MAX DESC
+LIMIT 10;
+```
+
+Lyon: Lyon, Geneva (112 km), Grenoble, Lausanne, Saint-Étienne,
+Clermont-Ferrand, Dijon, Besançon, Annecy, Roanne. `POP_MAX` is the
+urban area population, not the municipality's, and `-99` when unknown.
+Natural Earth lists 7,342 places worldwide, picked for map labels rather
+than completeness: for every town in North America, use OSM `places`.
