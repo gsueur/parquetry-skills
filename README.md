@@ -31,8 +31,10 @@ not general knowledge:
 - *Which congressional and state legislative districts do I vote in?*
 - *How many people live within 5 km of my sites, and what do they earn?*
 - *Which natural hazards threaten this site most?*
+- *Is this site on protected land, and who manages it?*
+- *Geocode these addresses and tell me which are in the flood zone.*
 
-The agent turns the question into a spatial query over ten open datasets
+The agent turns the question into a spatial query over thirteen open datasets
 published by Geomermaids on [parquetry](https://geoparquet.geomermaids.com),
 runs it with DuckDB straight from the URLs, and answers with the number,
 the definitions it chose, the coverage, the data dates and the credits.
@@ -49,6 +51,9 @@ parts of the GeoParquet files the question needs.
 | [Census TIGER/Line 2026](https://census.geomermaids.com) | United States | Congressional and state legislative districts of the 2026 elections |
 | [Census ACS 2020-2024](https://parquetry.geomermaids.com/census/acs/2024/) | United States | Population, income, poverty, housing, education and commuting by state, county, place, tract, block group and ZIP code area |
 | [FEMA National Risk Index](https://parquetry.geomermaids.com/nri/) | United States | Risk of 18 natural hazards by tract and county: expected loss, social vulnerability, resilience |
+| [PAD-US 4.1](https://parquetry.geomermaids.com/padus/) | United States | Protected and conservation lands: owner, manager, designation, GAP status, public access |
+| [National Address Database](https://parquetry.geomermaids.com/addresses/) | United States | 99 million address points for geocoding, with a coverage map |
+| [Gazetteer](https://parquetry.geomermaids.com/gazetteer/) | US, World | Place names to coordinates: Census Gazetteer 2026 and GeoNames |
 | [Natural Earth](https://parquetry.geomermaids.com/natural-earth/) | World | Countries, states, cities with population, coastlines, rivers, lakes, ports, airports, at three scales |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 
