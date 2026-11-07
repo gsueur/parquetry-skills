@@ -1,11 +1,11 @@
 ---
 name: reference-data
-description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
+description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", "geocode this address", "which of these addresses are in the flood zone", "is this site on protected land", "share of the county under federal management", "where is Springfield", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), US protected and conservation lands with manager, GAP status and public access (USGS PAD-US), 99 million US address points (USDOT National Address Database), place names to coordinates for US areas and 13 million names worldwide (Census Gazetteer, GeoNames), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
 ---
 
 # Spatial questions with the parquetry reference datasets
 
-Ten open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
+Thirteen open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
 You query them in place with DuckDB over HTTP range requests: no download
 step, no account, no API. Most questions combine two or three of them: an
 area from one, a phenomenon from another, the features to count from a
@@ -29,6 +29,9 @@ credit.
 | **Census ACS 2020-2024** | US | Population, age, households, income, poverty, home value, rent, tenure, race and Hispanic origin, education, commuting, each with its margin of error. Join to TIGER on `GEOID`. | **EPSG:4269** | `census/acs/2024/<geo>.parquet` (table) and `<geo>_geo.parquet` (with outlines), geo = state, county, place, tract, bg, zcta520 |
 | **FEMA National Risk Index 1.20** | US | Risk of 18 natural hazards: expected annual loss, social vulnerability, community resilience, composite risk. Scores and ratings per hazard. | CRS84 | `nri/v1.20/tracts,counties,states,tribal_counties.parquet`; `TRACTFIPS`, `STCOFIPS` join TIGER `GEOID` |
 | **Natural Earth 5.1.2** | World | Countries, states and provinces, populated places with population, urban areas, airports, ports, time zones, coastline, land, ocean, rivers, lakes. Small-scale context and labels. | CRS84 | `natural-earth/v5.1.2/<10m, 50m, 110m>/<layer>.parquet` |
+| **PAD-US 4.1** (USGS) | US | Protected and conservation lands: fee ownership, designations (wilderness, monuments), easements, marine areas, proclamation boundaries; manager, GAP status, public access. | **EPSG:4269** | `padus/v4.1/combined.parquet` (and `combined/state=<XX>/`), `fee, designation, easement, marine, proclamation.parquet` |
+| **National Address Database r24** (USDOT) | US, 45 states + DC, VI | 99 million address points with a normalized `full_address` for matching. | CRS84 | `addresses/nad/r24/state=<XX>/addresses.parquet`, one file per state |
+| **Gazetteer** | US, World | Names to points: Census Gazetteer 2026 (places, counties, tracts, ZCTAs... keyed by `GEOID`), GeoNames (13.5 million names, populations, feature codes). | 4269 (Census), CRS84 (GeoNames) | `gazetteer/census/2026/<layer>.parquet`, `gazetteer/geonames/latest/geonames.parquet`, `country=<CC>/`, `cities1000.parquet` |
 | **OpenStreetMap** | US, Canada, Mexico | Buildings, roads, railways, POIs, amenities, places, land use, water, boundaries, power, public transport, updated daily. | CRS84 | `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet` |
 
 Read `reference/datasets.md` for columns, value domains and licences
@@ -37,7 +40,7 @@ session. Each collection also publishes an agent guide with its full
 column list: `https://parquetry.geomermaids.com/<dataset>/catalog/<collection>/AGENTS.md`.
 
 For a map, use the PMTiles archives of GAUL, CORINE, Census (TIGER and
-ACS), NRI and Natural Earth with
+ACS), NRI, Natural Earth, PAD-US, the NAD coverage and GeoNames places with
 MapLibre, not the Parquet files: `reference/datasets.md`, "Maps".
 
 Outside these footprints, say so. Do not answer a land-cover question
@@ -220,3 +223,15 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   tracts. States have no composite rating: use `EAL_RATNG`.
 - Natural Earth `ISO_A2` is `-99` for France and Norway, among others:
   join countries on `ISO_A2_EH`, `ISO_A3_EH` or `ADM0_A3`.
+- PAD-US areas overlap, in the Combined layer too: a wilderness lies on
+  fee land, a proclamation boundary encloses both. Never sum `GIS_Acres`
+  or areas across rows: take the union of the geometries, or keep
+  `Category = 'Fee'` for ownership, and leave `Proclamation` out of area
+  questions. Grand County, Utah: federal rows sum to 99.8% of the county,
+  their union is 73.7%.
+- The NAD is not complete: no rows for HI, MI, MS, NH, NV and the
+  territories but VI, and only some counties in others (GA 2 of 159,
+  FL 8 of 67, CA 18 of 58). An address not found is not an address that
+  does not exist: check `addresses/nad/r24/_coverage.json` first.
+- Reading the NAD states through the S3 glob, pass
+  `hive_partitioning = false`: the `State` column already holds the value.

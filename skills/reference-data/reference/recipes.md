@@ -608,3 +608,88 @@ Clermont-Ferrand, Dijon, Besançon, Annecy, Roanne. `POP_MAX` is the
 urban area population, not the municipality's, and `-99` when unknown.
 Natural Earth lists 7,342 places worldwide, picked for map labels rather
 than completeness: for every town in North America, use OSM `places`.
+
+## Protected land at a site
+
+"Is this site on protected land, and who manages it?" Every PAD-US area
+under the point, about 1.5 s.
+
+<!-- test: protected-land-at-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = -109.5925;
+SET VARIABLE lat = 38.7331;
+SET VARIABLE x = getvariable('lon')::FLOAT;
+SET VARIABLE y = getvariable('lat')::FLOAT;
+
+-- Every PAD-US area under the point: fee land, designations on it, and the
+-- proclamation boundaries around them. NAD83 like TIGER: an untagged point
+-- compares with it directly.
+SELECT Category, Unit_Nm, Mang_Name_Desc AS manager, Des_Tp_Desc AS designation,
+       GAP_Sts AS gap, Pub_Access_Desc AS access
+FROM read_parquet('https://parquetry.geomermaids.com/padus/v4.1/combined.parquet')
+WHERE bbox.xmin <= getvariable('x') AND bbox.xmax >= getvariable('x')
+  AND bbox.ymin <= getvariable('y') AND bbox.ymax >= getvariable('y')
+  AND ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')))
+ORDER BY Category, GAP_Sts;
+```
+
+Arches National Park: the fee land (National Park Service, GAP 1, open
+access) and its proclamation boundary. Expect several rows: a designation
+lies on fee land and a boundary encloses both. Report the fee row for
+ownership and the strongest GAP status for protection; never add their
+areas.
+
+## Geocode an address
+
+"Where is 1 Beacon Street, Boston?" The NAD file of the state, narrowed by
+ZIP code, ranked by similarity to the normalized input, about 3 s.
+
+<!-- test: geocode-address -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+-- The input normalized the way full_address is: upper case, no punctuation,
+-- USPS abbreviations, '<number> <street>, <city>, <state> <zip>'.
+SET VARIABLE q = '1 BEACON ST, BOSTON, MA 02108';
+
+SELECT full_address, Longitude, Latitude, Placement, County
+FROM read_parquet('https://parquetry.geomermaids.com/addresses/nad/r24/state=MA/addresses.parquet')
+WHERE Zip_Code = '02108'
+ORDER BY jaro_winkler_similarity(full_address, getvariable('q')) DESC
+LIMIT 3;
+```
+
+`1 BEACON ST, BOSTON, MA 02108` matches exactly at (-71.06084, 42.35846).
+A similarity below about 0.95 is a different address: say so rather than
+return the nearest number. If the state has no NAD rows (HI, MI, MS, NH,
+NV), fall back to OSM `buildings` addresses, then to the street.
+
+## Place name to coordinates
+
+"Where is Springfield?" Census places with their ACS population, and
+GeoNames places, about 1 s.
+
+<!-- test: place-name-lookup -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+-- US: the Census places, with their ACS population through GEOID.
+SELECT 'census' AS source, g.NAME AS name, g.USPS AS region, a.population,
+       g.INTPTLONG AS lon, g.INTPTLAT AS lat, g.GEOID AS id
+FROM read_parquet('https://parquetry.geomermaids.com/gazetteer/census/2026/place.parquet') AS g
+LEFT JOIN read_parquet('https://parquetry.geomermaids.com/census/acs/2024/place.parquet') AS a
+  USING (GEOID)
+WHERE g.NAME = 'Springfield city'
+UNION ALL
+-- Anywhere: GeoNames' places of 1,000 people or more.
+SELECT 'geonames', name, country_code || '-' || admin1_name, population,
+       longitude, latitude, geonameid::VARCHAR
+FROM read_parquet('https://parquetry.geomermaids.com/gazetteer/geonames/latest/cities1000.parquet')
+WHERE name = 'Springfield'
+ORDER BY population DESC NULLS LAST, source
+LIMIT 10;
+```
+
+Both sources agree: Springfield MO (about 170,000), MA, IL, OR, OH. Census
+names carry the legal suffix ("Springfield city"); GeoNames gives the
+region name and works outside the US. For a name with no population
+(a mountain, a lake), use `geonames.parquet` and its `feature_code`.

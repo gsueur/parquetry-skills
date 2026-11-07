@@ -379,6 +379,99 @@ Natural Earth's columns unchanged:
   Test the geometry.
 - Licence: public domain. Credit "Made with Natural Earth".
 
+## USGS PAD-US 4.1: protected areas, United States
+
+The Protected Areas Database of the United States, version 4.1 (2025),
+from USGS's Gap Analysis Project. **NAD83 (EPSG:4269)**, like TIGER.
+
+| File | Rows | What |
+|---|---|---|
+| `padus/v4.1/combined.parquet` | 656,986 | every feature class together: start here |
+| `padus/v4.1/combined/state=<XX>/combined.parquet` | 58 files | Combined per state or territory (postal code) |
+| `padus/v4.1/fee.parquet` | 296,456 | ownership parcels |
+| `padus/v4.1/designation.parquet` | 13,398 | policy designations (wilderness, monuments) |
+| `padus/v4.1/easement.parquet` | 341,954 | conservation easements |
+| `padus/v4.1/marine.parquet` | 1,739 | marine protected areas |
+| `padus/v4.1/proclamation.parquet` | 3,439 | approved and proclamation boundaries |
+| `padus/v4.1/lookups/<table>.parquet` | 8 tables | the code tables (`Code`, `Dom`) |
+
+- Columns are PAD-US's, plus `<col>_Desc` beside every coded one:
+  `Category` (Fee, Designation, Easement, Marine, Proclamation),
+  `Unit_Nm`, `Own_Type`, `Own_Name`, `Mang_Type`, `Mang_Name` (agency
+  code, `Mang_Name_Desc` the name), `Des_Tp`, `State_Nm`, `GIS_Acres`,
+  `GAP_Sts`, `Pub_Access`, `IUCN_Cat`, `Date_Est`, `Source_PAID`,
+  `WDPA_Cd`.
+- GAP status: `1` and `2` managed for biodiversity (1 lets disturbance
+  such as fire run its course, 2 suppresses it), `3` multiple use (open
+  to mining, logging or off-highway vehicles), `4` no known mandate.
+- Public access: `OA` open, `RA` restricted (permit or season), `XA`
+  closed, `UK` unknown.
+- **Areas overlap, in Combined too.** For "how much is protected", take
+  the union of the geometries, or `Category = 'Fee'` for ownership, and
+  leave `Proclamation` out: it is an approved or extent boundary, not land
+  held. Never sum `GIS_Acres` across rows.
+- `OBJECTID` is unique within 4.1 only; `Source_PAID` and `WDPA_Cd`
+  identify an area across releases where present.
+- A few Alaska areas are 10 to 26 MB each: always filter on `bbox` first.
+- Licence: public domain. Credit "U.S. Geological Survey, Gap Analysis
+  Project, PAD-US 4.1".
+
+## US National Address Database, release 24
+
+USDOT's National Address Database, compiled 2026-09-30: 99,226,272
+address points. **CRS84** (NAD's lon/lat are WGS 84).
+
+- Files: `addresses/nad/r24/state=<XX>/addresses.parquet`, one per state
+  (postal code), Hilbert sorted. No national file: read every state with
+  `s3://parquetry/addresses/nad/r24/state=*/addresses.parquet` on the S3
+  endpoint, `hive_partitioning = false`.
+- Columns are NAD's 62 (`Add_Number`, `St_PreDir`, `St_Name`,
+  `St_PosTyp`, `StNam_Full`, `Unit`, `Inc_Muni`, `Post_City`, `County`,
+  `State`, `Zip_Code`, `Longitude`, `Latitude`, `Placement`, `UUID`,
+  `OID_`, `DateUpdate`...) plus `full_address`, normalized for matching:
+  upper case, no punctuation, USPS abbreviations,
+  `'<number> <street with modifiers> <unit>, <city>, <state> <zip>'`.
+  Normalize the input the same way, filter on `Zip_Code` or `State`, then
+  match exactly or rank with `jaro_winkler_similarity`.
+- `Placement` says how the point was placed: `Structure - Rooftop`,
+  `Structure - Entrance`, `Site`, `Parcel - Centroid`, `Other`, `Unknown`.
+  A rooftop point is not a parcel centroid; say which you return.
+- Coverage: no rows for HI, MI, MS, NH, NV, AS, GU, MP, PR; partial in
+  others (GA 2 of 159 counties, FL 8/67, SC 3/46, LA 5/64, CA 18/58,
+  PA 25/67, MO 33/115). `addresses/nad/r24/_coverage.json` lists rows and
+  counties per state; `addresses_h3.parquet` counts points on H3 cells
+  (resolutions 4, 6, 8).
+- `OID_` is unique within r24; `UUID` follows a point across releases
+  (220 values repeat in r24).
+- Licence: public domain. Credit "U.S. Department of Transportation,
+  National Address Database, release 24".
+
+## Gazetteer: Census Gazetteer 2026 and GeoNames
+
+Names to points. **Census** for US statistical areas, joined to TIGER and
+the ACS on `GEOID`; **GeoNames** for anywhere else, and for features that
+are not statistical areas (mountains, lakes, buildings).
+
+- Census Gazetteer 2026, **EPSG:4269**:
+  `gazetteer/census/2026/<layer>.parquet`, named like the TIGER layers:
+  `state`, `county`, `place` (32,363), `cousub`, `tract`, `zcta520`,
+  `cbsa`, `cd120`, `sldu`, `sldl`, `uac20`, `aiannh`, `elsd`, `scsd`,
+  `unsd`, `sdadm`, `aiannhrt`. Columns `USPS`, `GEOID`, `NAME` ("Springfield
+  city", with the legal suffix), `ALAND`, `AWATER`, `INTPTLAT`,
+  `INTPTLONG`, a point `geometry`. No population: join the ACS on `GEOID`.
+- GeoNames, **CRS84**, rebuilt weekly (`_manifest.json` gives the dump
+  date): `gazetteer/geonames/latest/geonames.parquet` (13,483,704 names),
+  `country=<CC>/geonames.parquet`, and `cities1000.parquet` (172,035
+  places of 1,000 people or more, plus seats of government). Columns
+  `geonameid`, `name`, `asciiname`, `alternatenames`, `feature_class`,
+  `feature_code` with `feature_name`, `country_code`, `country_name`,
+  `admin1_name`, `admin2_name`, `population`, `elevation`, `timezone`.
+  About 55,000 admin1 and 163,000 admin2 codes have no name in GeoNames'
+  own lists: the code is kept, the name is empty.
+- Licence: Census public domain, credit "U.S. Census Bureau, 2026
+  Gazetteer Files"; GeoNames CC BY 4.0, credit "GeoNames
+  (www.geonames.org)".
+
 ## OpenStreetMap: US, Canada, Mexico
 
 - Files: `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet`, for
@@ -422,6 +515,9 @@ to the data and answer range requests:
 | `nri/v1.20/<level>.pmtiles` | `tracts`, `counties`, `states`, `tribal_counties` | tracts 7-12, counties and states 0-10, tribal 0-12 | the key, the ratings (`RISK_RATNG`; `EAL_RATNG` for states) and their scores |
 | `natural-earth/v5.1.2/<scale>/<layer>.pmtiles` | the layer name | 10m 0-8 (admin-1, places, airports 1-8), 50m 0-5, 110m 0-3 | all, but only the naming columns for 10m admin-1 and places and for 50m places |
 | `natural-earth/v5.1.2/<scale>/basemap.pmtiles` | `ne`, every layer, told apart by `ne_layer` | as above | as above |
+| `padus/v4.1/combined.pmtiles` | `combined` | 0-12 | `Unit_Nm`, `Category`, `Mang_Name_Desc`, `Des_Tp_Desc`, `GAP_Sts`, `Pub_Access`, `IUCN_Cat`, `GIS_Acres`, codes |
+| `addresses/nad/r24/addresses_h3.pmtiles` | `cells_r4` z0-4, `cells_r6` z5-7, `cells_r8` z8-11 | 0-11 | address count per H3 cell: where the NAD has data |
+| `gazetteer/geonames/latest/cities1000.pmtiles` | `cities1000` | 0-12 | `geonameid`, `name`, `feature_code`, `country_code`, `population` (the most populous place per cell at each zoom) |
 
 - CORINE features carry their official colour: `["get", "color"]` draws
   the legend with no lookup table.
@@ -445,7 +541,8 @@ to the data and answer range requests:
 Every dataset has a STAC catalog (Portolan profile):
 `https://parquetry.geomermaids.com/<dataset>/catalog/catalog.json` for
 `gaul`, `gmwid`, `nfhl`, `clc`, `geoconnex`, `census` (TIGER/Line, and
-the ACS in its `acs-2024` sub-catalog), `nri`, `natural-earth` and `osm`.
+the ACS in its `acs-2024` sub-catalog), `nri`, `natural-earth`, `padus`,
+`addresses`, `gazetteer` and `osm`.
 `https://catalog.geomermaids.com/catalog.json` is the root that links
 them all, with a browser for people. Each
 collection links its files, its PMTiles archive, its styles and an

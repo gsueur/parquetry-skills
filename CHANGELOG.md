@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0 (2026-11-07)
+
+### reference-data
+
+- Three datasets, thirteen in all:
+  - USGS PAD-US 4.1: protected and conservation lands, Combined and the
+    five feature classes, with decoded manager, designation, GAP status and
+    public access.
+  - USDOT National Address Database release 24: 99 million address points,
+    one file per state, a normalized `full_address`, and its coverage.
+  - Gazetteer: the Census Gazetteer 2026 (17 layers keyed by `GEOID`) and
+    GeoNames (13.5 million names worldwide, `cities1000`).
+- Three tested recipes: protected land at a site (PAD-US), geocode an
+  address (NAD), place name to coordinates (Census with the ACS population,
+  and GeoNames).
+- Pitfalls: PAD-US areas overlap in Combined too, so never sum them (Grand
+  County, Utah: 99.8% summed, 73.7% as a union); NAD coverage gaps; the
+  NAD S3 glob needs `hive_partitioning = false`.
+- Maps: PAD-US Combined, the NAD coverage on H3 cells, GeoNames places.
+
 ## 0.4.0 (2026-11-07)
 
 ### reference-data
