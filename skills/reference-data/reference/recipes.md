@@ -239,8 +239,9 @@ SELECT county, count(*) AS buildings FROM hit GROUP BY county ORDER BY buildings
 SELECT count(DISTINCT (osm_type, osm_id)) AS buildings_total FROM hit;
 ```
 
-For "how many people", OSM has no population per building: say so rather
-than estimate. For the share of buildings, divide by the buildings inside
+For "how many people", OSM has no population per building: use USA
+Structures (`POP_MEDIAN`) or the 2020 blocks, as in "Buildings and
+residents inside an area" below. For the share of buildings, divide by the buildings inside
 the counties, not inside the extent: join `b` with the GAUL L2 polygons of
 the counties first.
 
@@ -693,3 +694,313 @@ Both sources agree: Springfield MO (about 170,000), MA, IL, OR, OH. Census
 names carry the legal suffix ("Springfield city"); GeoNames gives the
 region name and works outside the US. For a name with no population
 (a mountain, a lake), use `geonames.parquet` and its `feature_code`.
+
+## Population near a point, outside the US
+
+"How many people live within 10 km of this site?" anywhere in the world,
+from the WorldPop cells of the country, under 1 s. It counts whole cells
+by their centre: good to a cell (about 2.5 km), not to a street. In the
+US, use the ACS tracts above or the 2020 blocks below.
+
+<!-- test: population-worldpop -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE iso3 = 'KEN';
+SET VARIABLE lon = 36.8219;
+SET VARIABLE lat = -1.2921;
+SET VARIABLE km = 10;
+SET VARIABLE dy = getvariable('km') / 111.0;
+SET VARIABLE dx = getvariable('km') / (111.0 * cos(radians(getvariable('lat'))));
+SET VARIABLE x0 = (getvariable('lon') - getvariable('dx') - 1e-4)::FLOAT;
+SET VARIABLE x1 = (getvariable('lon') + getvariable('dx') + 1e-4)::FLOAT;
+SET VARIABLE y0 = (getvariable('lat') - getvariable('dy') - 1e-4)::FLOAT;
+SET VARIABLE y1 = (getvariable('lat') + getvariable('dy') + 1e-4)::FLOAT;
+
+SET geometry_always_xy = true;
+-- Cells whose centre is within the distance; lon, lat are the cell centre.
+SELECT count(*) AS cells,
+       round(sum(population)) AS population,
+       round(sum(pop_0_14)) AS under_15,
+       round(sum(pop_65_plus)) AS over_64,
+       round(100 * sum(female) / sum(population), 1) AS female_pct
+FROM read_parquet('https://parquetry.geomermaids.com/worldpop/R2025A/2025/country='
+                  || getvariable('iso3') || '/worldpop_2025.parquet')
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0')
+  AND ST_Distance_Sphere(ST_Point(lon, lat), ST_Point(getvariable('lon'), getvariable('lat')))
+      <= getvariable('km') * 1000;
+```
+
+Nairobi, 10 km: 54 cells, about 3.1 million people, 869,000 under 15 and
+38,000 over 64. These are modelled estimates: round them in the answer.
+For a radius across a border, read each country file, or the
+`s3://parquetry/worldpop/R2025A/2025/country=*/` glob.
+
+## Fire history at a site
+
+"Has this site burned?" Every MTBS burned area since 1984 and every WFIGS
+perimeter under the point, about 1.5 s.
+
+<!-- test: fire-history-at-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = -120.9520;
+SET VARIABLE lat = 40.1396;
+SET VARIABLE x = getvariable('lon')::FLOAT;
+SET VARIABLE y = getvariable('lat')::FLOAT;
+
+-- Large fires since 1984 (MTBS), then every WFIGS perimeter since 2016.
+SELECT 'mtbs' AS source, incid_name AS name, incid_type AS type,
+       ig_date::DATE AS started, round(burnbndac) AS acres
+FROM read_parquet('https://parquetry.geomermaids.com/fire/mtbs/latest/mtbs_perimeters.parquet')
+WHERE bbox.xmin <= getvariable('x') AND bbox.xmax >= getvariable('x')
+  AND bbox.ymin <= getvariable('y') AND bbox.ymax >= getvariable('y')
+  AND ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')))
+UNION ALL
+SELECT 'wfigs', poly_IncidentName, attr_IncidentTypeCategory,
+       attr_FireDiscoveryDateTime::DATE, round(poly_GISAcres)
+FROM read_parquet('https://parquetry.geomermaids.com/fire/wfigs/latest/all_since_2016.parquet')
+WHERE bbox.xmin <= getvariable('x') AND bbox.xmax >= getvariable('x')
+  AND bbox.ymin <= getvariable('y') AND bbox.ymax >= getvariable('y')
+  AND ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')))
+ORDER BY started;
+```
+
+Greenville, California: the Dixie fire of July 2021, in both sources
+(963,309 acres in WFIGS, 979,722 in MTBS, which maps it from imagery).
+WFIGS starts in practice in 2020 and MTBS lags a year or two and keeps
+only large fires: before 2020 trust MTBS, for this year trust WFIGS
+(`year_to_date`), for small fires `incidents_ytd` (points only). No row is
+not proof that no fire ever burned there.
+
+## Buildings and residents inside an area
+
+"How many buildings and people were inside the Eaton fire perimeter?"
+USA Structures footprints touching the perimeter, by occupancy, about 5 s.
+The same pattern works for a flood zone or a PAD-US unit.
+
+<!-- test: structures-in-perimeter -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE fire = 'Eaton';
+SET VARIABLE state = 'CA';
+SET VARIABLE year = 2025;
+
+-- 1. The perimeter, from WFIGS (2020 on; use MTBS for older fires).
+CREATE TABLE p AS
+SELECT poly_IncidentName AS name, poly_GISAcres AS acres, geometry AS geom,
+       bbox.xmin AS x0, bbox.ymin AS y0, bbox.xmax AS x1, bbox.ymax AS y1
+FROM read_parquet('https://parquetry.geomermaids.com/fire/wfigs/latest/all_since_2016.parquet')
+WHERE poly_IncidentName = getvariable('fire')
+  AND attr_POOState = 'US-' || getvariable('state')
+  AND year(attr_FireDiscoveryDateTime) = getvariable('year');
+SELECT name, round(acres) AS acres FROM p;
+SET VARIABLE x0 = (SELECT min(x0) FROM p);
+SET VARIABLE x1 = (SELECT max(x1) FROM p);
+SET VARIABLE y0 = (SELECT min(y0) FROM p);
+SET VARIABLE y1 = (SELECT max(y1) FROM p);
+
+-- 2. Footprints inside it (FLOAT bounds read from bbox, so row groups are skipped).
+CREATE TABLE b AS
+SELECT BUILD_ID, OCC_CLS, POP_MEDIAN, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/structures/latest/state='
+                  || getvariable('state') || '/structures.parquet')
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0');
+
+-- 3. Buildings touching the perimeter, by occupancy, with ORNL's residents.
+SELECT b.OCC_CLS, count(DISTINCT b.BUILD_ID) AS buildings, round(sum(b.POP_MEDIAN)) AS residents
+FROM b JOIN p ON ST_Intersects(p.geom, b.geometry)
+GROUP BY ALL ORDER BY buildings DESC;
+```
+
+Eaton fire, January 2025 (14,021 acres): 10,644 residential buildings with
+about 25,800 residents by ORNL's model, 172 commercial, 80 education. This
+counts buildings inside the perimeter, not damage. The 2020 blocks give
+24,295 people for the same perimeter (next recipe): quote the census
+figure for people and Structures for buildings.
+
+## Population inside an area, from 2020 blocks
+
+"How many people live inside this polygon?" The 2020 blocks whose interior
+point falls inside, about 1.5 s. Blocks are the finest US count, much
+sharper than tracts for a small or irregular area.
+
+<!-- test: blocks-in-polygon -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE state = 'CA';
+SET VARIABLE fire = 'Eaton';
+SET VARIABLE year = 2025;
+
+-- 1. Any area as a polygon: here a fire perimeter.
+CREATE TABLE area AS
+SELECT geometry AS geom, bbox.xmin AS x0, bbox.ymin AS y0, bbox.xmax AS x1, bbox.ymax AS y1
+FROM read_parquet('https://parquetry.geomermaids.com/fire/wfigs/latest/all_since_2016.parquet')
+WHERE poly_IncidentName = getvariable('fire') AND attr_POOState = 'US-' || getvariable('state')
+  AND year(attr_FireDiscoveryDateTime) = getvariable('year');
+SET VARIABLE x0 = (SELECT min(x0) FROM area);
+SET VARIABLE x1 = (SELECT max(x1) FROM area);
+SET VARIABLE y0 = (SELECT min(y0) FROM area);
+SET VARIABLE y1 = (SELECT max(y1) FROM area);
+
+-- 2. The 2020 blocks of the state in that extent, by interior point.
+--    INTPTLON20/INTPTLAT20 are text; NAD83 against WGS84 is about 1 m here.
+CREATE TABLE blk AS
+SELECT GEOID20, POP20, HOUSING20,
+       ST_Point(INTPTLON20::DOUBLE, INTPTLAT20::DOUBLE) AS pt
+FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2020/block/state='
+                  || getvariable('state') || '/blocks.parquet', hive_partitioning = false)
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0');
+
+SELECT count(*) AS blocks, sum(POP20) AS population_2020, sum(HOUSING20) AS housing_units_2020
+FROM blk JOIN area ON ST_Intersects(area.geom, blk.pt);
+```
+
+Eaton fire perimeter: 267 blocks, 24,295 people and 9,335 housing units in
+2020. Say that the count is of 2020 and by block interior point. For a
+radius, build the circle in a UTM zone and transform it back, or filter
+the interior points with `ST_Distance_Sphere`.
+
+## Wetlands at a site
+
+"Are there wetlands on or near this site?" NWI polygons within 200 m,
+with distance, area inside the circle and the imagery year, about 1.5 s.
+
+<!-- test: wetlands-near-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE state = 'MA';
+SET VARIABLE lon = -70.3300;
+SET VARIABLE lat = 41.7080;
+SET VARIABLE m = 200;
+SET VARIABLE utm = 'EPSG:269' || (floor((getvariable('lon') + 180) / 6) + 1)::INT;  -- NAD83 UTM zone
+SET VARIABLE dy = getvariable('m') / 111000.0;
+SET VARIABLE dx = getvariable('m') / (111000.0 * cos(radians(getvariable('lat'))));
+SET VARIABLE x0 = (getvariable('lon') - getvariable('dx') - 1e-4)::FLOAT;
+SET VARIABLE x1 = (getvariable('lon') + getvariable('dx') + 1e-4)::FLOAT;
+SET VARIABLE y0 = (getvariable('lat') - getvariable('dy') - 1e-4)::FLOAT;
+SET VARIABLE y1 = (getvariable('lat') + getvariable('dy') + 1e-4)::FLOAT;
+
+SET geometry_always_xy = true;
+-- Wetland polygons near the site, in metres (NAD83 / UTM). Deepwater types
+-- are kept and labelled: leave them out if the question is about wetlands.
+CREATE TABLE w AS
+SELECT ATTRIBUTE, WETLAND_TYPE, ACRES,
+       ST_Transform(geometry::GEOMETRY, 'EPSG:4269', getvariable('utm')) AS g
+FROM read_parquet('https://parquetry.geomermaids.com/wetlands/nwi/2026-10/state='
+                  || getvariable('state') || '/wetlands.parquet', hive_partitioning = false)
+WHERE bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0');
+
+CREATE TABLE site AS
+SELECT ST_Transform(ST_Point(getvariable('lon'), getvariable('lat')), 'EPSG:4269', getvariable('utm')) AS p;
+
+SELECT ATTRIBUTE, WETLAND_TYPE,
+       round(min(ST_Distance(g, p))) AS metres,
+       round(sum(ST_Area(ST_Intersection(g, ST_Buffer(p, getvariable('m'))))) / 1e4, 2) AS ha_within,
+       (SELECT max(IMAGE_YR) FROM read_parquet('https://parquetry.geomermaids.com/wetlands/nwi/2026-10/projects.parquet')
+        WHERE bbox.xmin <= getvariable('lon')::FLOAT AND bbox.xmax >= getvariable('lon')::FLOAT
+          AND bbox.ymin <= getvariable('lat')::FLOAT AND bbox.ymax >= getvariable('lat')::FLOAT
+          AND ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')))) AS imagery_year
+FROM w, site
+WHERE ST_DWithin(g, p, getvariable('m'))
+GROUP BY ALL
+ORDER BY metres;
+```
+
+Barnstable, Massachusetts, 200 m: salt marsh (`E2EM1Pd`, estuarine
+emergent) 38 m away, tidal flats under the point, 11.5 ha of wetland in
+the circle, mapped from 2008 imagery. Name the Cowardin code and the type,
+say how old the mapping is, and say that NWI is not a jurisdictional
+delineation.
+
+## Schools in the flood zone
+
+"Which schools in Charleston County are in the 100-year floodplain?"
+Public, private and postsecondary schools against the county's FEMA
+delivery, read on the schools' extent only, about 3 s.
+
+<!-- test: schools-in-flood-zone -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE county_geoid = '45019';  -- Charleston County, SC
+
+-- 1. Public and private schools and colleges of the county.
+CREATE TABLE s AS
+SELECT 'public' AS kind, NCESSCH AS id, NAME, CITY, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/schools/latest/public.parquet')
+WHERE CNTY = getvariable('county_geoid')
+UNION ALL
+SELECT 'private', PPIN, NAME, CITY, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/schools/latest/private.parquet')
+WHERE CNTY = getvariable('county_geoid')
+UNION ALL
+SELECT 'postsecondary', UNITID, NAME, CITY, geometry
+FROM read_parquet('https://parquetry.geomermaids.com/schools/latest/postsecondary.parquet')
+WHERE CNTY = getvariable('county_geoid');
+
+-- 2. The county's FEMA delivery, read on the schools' extent only. NFHL's
+--    bbox is DOUBLE: computed DOUBLE bounds skip row groups there.
+CREATE TABLE dl AS
+SELECT path, fema_update_date
+FROM read_parquet('https://parquetry.geomermaids.com/nfhl/latest/counties.parquet')
+WHERE dfirm_id = getvariable('county_geoid') || 'C';  -- county-wide deliveries are <FIPS>C
+SET VARIABLE files = (SELECT list('https://parquetry.geomermaids.com/nfhl/latest/' || path) FROM dl);
+SET VARIABLE x0 = (SELECT min(ST_X(geometry)) FROM s);
+SET VARIABLE x1 = (SELECT max(ST_X(geometry)) FROM s);
+SET VARIABLE y0 = (SELECT min(ST_Y(geometry)) FROM s);
+SET VARIABLE y1 = (SELECT max(ST_Y(geometry)) FROM s);
+CREATE TABLE fz AS
+SELECT flood_zone, geometry::GEOMETRY AS geom
+FROM read_parquet(getvariable('files'))
+WHERE risk = '1 percent flood zone'
+  AND bbox.xmin <= getvariable('x1') AND bbox.xmax >= getvariable('x0')
+  AND bbox.ymin <= getvariable('y1') AND bbox.ymax >= getvariable('y0');
+
+-- 3. Schools inside a 1% annual chance zone, once each.
+SELECT s.kind, count(DISTINCT s.id) AS in_zone,
+       (SELECT count(*) FROM s AS a WHERE a.kind = s.kind) AS total
+FROM s JOIN fz ON ST_Intersects(fz.geom, s.geometry)
+GROUP BY s.kind ORDER BY s.kind;
+```
+
+Charleston County, SC: 14 of 95 public schools, 10 of 36 private schools
+and 4 of 13 colleges sit in a 1% annual chance zone. A point is the
+school's geocode, not its campus: say so, and remember NFHL is not an
+official determination. Counties with no county-wide delivery have no
+`<FIPS>C` row: look them up by `state` and `county` in `counties.parquet`.
+
+## Tribal area at a point
+
+"Is this site on tribal land?" The TIGER 2026 tribal area and tribal
+census tract under the point, about 1 s.
+
+<!-- test: tribal-area-at-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET VARIABLE lon = -109.0526;
+SET VARIABLE lat = 35.6807;
+SET VARIABLE x = getvariable('lon')::FLOAT;
+SET VARIABLE y = getvariable('lat')::FLOAT;
+
+-- The tribal area under the point and its tribal census tract.
+SELECT a.GEOID, a.NAMELSAD, a.COMPTYP, a.AIANNHR, t.NAMELSAD AS tribal_tract
+FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2026/aiarelated/aiannh.parquet') AS a
+LEFT JOIN (
+  SELECT AIANNHCE, NAMELSAD, geometry
+  FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2026/aiarelated/ttract.parquet')
+  WHERE bbox.xmin <= getvariable('x') AND bbox.xmax >= getvariable('x')
+    AND bbox.ymin <= getvariable('y') AND bbox.ymax >= getvariable('y')
+    AND ST_Intersects(geometry, ST_Point(getvariable('lon'), getvariable('lat')))) AS t
+  ON t.AIANNHCE = a.AIANNHCE
+WHERE a.bbox.xmin <= getvariable('x') AND a.bbox.xmax >= getvariable('x')
+  AND a.bbox.ymin <= getvariable('y') AND a.bbox.ymax >= getvariable('y')
+  AND ST_Intersects(a.geometry, ST_Point(getvariable('lon'), getvariable('lat')));
+```
+
+Window Rock, Arizona: Navajo Nation Reservation (`2430R`, federally
+recognized), tribal census tract T035. Census boundaries are statistical,
+not legal descriptions of jurisdiction. NRI scores the tribal areas in
+`nri/v1.20/tribal_counties.parquet`, by `AIANNHCE`.

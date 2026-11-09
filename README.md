@@ -34,7 +34,7 @@ not general knowledge:
 - *Is this site on protected land, and who manages it?*
 - *Geocode these addresses and tell me which are in the flood zone.*
 
-The agent turns the question into a spatial query over thirteen open datasets
+The agent turns the question into a spatial query over eighteen open datasets
 published by Geomermaids on [parquetry](https://geoparquet.geomermaids.com),
 runs it with DuckDB straight from the URLs, and answers with the number,
 the definitions it chose, the coverage, the data dates and the credits.
@@ -54,6 +54,12 @@ parts of the GeoParquet files the question needs.
 | [PAD-US 4.1](https://parquetry.geomermaids.com/padus/) | United States | Protected and conservation lands: owner, manager, designation, GAP status, public access |
 | [National Address Database](https://parquetry.geomermaids.com/addresses/) | United States | 99 million address points for geocoding, with a coverage map |
 | [Gazetteer](https://parquetry.geomermaids.com/gazetteer/) | US, World | Place names to coordinates: Census Gazetteer 2026 and GeoNames |
+| [WorldPop 2025](https://parquetry.geomermaids.com/worldpop/) | World | Population on H3 cells, with age groups and sex |
+| [FEMA USA Structures](https://parquetry.geomermaids.com/structures/) | United States | 146 million building footprints with occupancy and modelled residents |
+| [Wildfire](https://parquetry.geomermaids.com/fire/) | United States | Fires burning now, perimeters since 2020 (NIFC WFIGS), burned areas since 1984 (MTBS) |
+| [NWI wetlands](https://parquetry.geomermaids.com/wetlands/) | United States | Wetland and deepwater polygons with their Cowardin class |
+| [NCES schools](https://parquetry.geomermaids.com/schools/) | United States | Public, private and postsecondary schools |
+| [Census tribal areas and 2020 blocks](https://census.geomermaids.com) | United States | Reservations and tribal tracts; 2020 census population and housing units by block |
 | [Natural Earth](https://parquetry.geomermaids.com/natural-earth/) | World | Countries, states, cities with population, coastlines, rivers, lakes, ports, airports, at three scales |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 
