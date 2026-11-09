@@ -1,11 +1,11 @@
 ---
 name: reference-data
-description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", "geocode this address", "which of these addresses are in the flood zone", "is this site on protected land", "share of the county under federal management", "where is Springfield", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), US protected and conservation lands with manager, GAP status and public access (USGS PAD-US), 99 million US address points (USDOT National Address Database), place names to coordinates for US areas and 13 million names worldwide (Census Gazetteer, GeoNames), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
+description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", "geocode this address", "which of these addresses are in the flood zone", "is this site on protected land", "share of the county under federal management", "where is Springfield", "how many people live within 10 km of this site in Kenya", "how many buildings were inside the fire perimeter", "has this site burned", "are there wetlands on this parcel", "which schools are in the flood zone", "is this site on tribal land", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), US protected and conservation lands with manager, GAP status and public access (USGS PAD-US), 99 million US address points (USDOT National Address Database), place names to coordinates for US areas and 13 million names worldwide (Census Gazetteer, GeoNames), world population on H3 cells with age and sex (WorldPop 2025), 146 million US building footprints with modelled residents (FEMA USA Structures), US wildfire perimeters live and since 1984 (NIFC WFIGS, MTBS), US wetlands (USFWS NWI), US public, private and postsecondary schools (NCES), US tribal areas and 2020 census blocks with population (TIGER/Line), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
 ---
 
 # Spatial questions with the parquetry reference datasets
 
-Thirteen open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
+Eighteen open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
 You query them in place with DuckDB over HTTP range requests: no download
 step, no account, no API. Most questions combine two or three of them: an
 area from one, a phenomenon from another, the features to count from a
@@ -32,6 +32,12 @@ credit.
 | **PAD-US 4.1** (USGS) | US | Protected and conservation lands: fee ownership, designations (wilderness, monuments), easements, marine areas, proclamation boundaries; manager, GAP status, public access. | **EPSG:4269** | `padus/v4.1/combined.parquet` (and `combined/state=<XX>/`), `fee, designation, easement, marine, proclamation.parquet` |
 | **National Address Database r24** (USDOT) | US, 45 states + DC, VI | 99 million address points with a normalized `full_address` for matching. | CRS84 | `addresses/nad/r24/state=<XX>/addresses.parquet`, one file per state |
 | **Gazetteer** | US, World | Names to points: Census Gazetteer 2026 (places, counties, tracts, ZCTAs... keyed by `GEOID`), GeoNames (13.5 million names, populations, feature codes). | 4269 (Census), CRS84 (GeoNames) | `gazetteer/census/2026/<layer>.parquet`, `gazetteer/geonames/latest/geonames.parquet`, `country=<CC>/`, `cities1000.parquet` |
+| **WorldPop 2025** | World | People per H3 cell (about 5 km²), by age group and sex. Population near a point outside the US. | CRS84 | `worldpop/R2025A/2025/country=<ISO3>/worldpop_2025.parquet`, a world file at H3 r5 |
+| **FEMA USA Structures** | US, 56 states and territories | 146 million building footprints: occupancy, height, area, ORNL's modelled residents. Buildings exposed to a hazard. | CRS84 | `structures/latest/state=<XX>/structures.parquet`, and `cells.parquet` (counts on H3) |
+| **Wildfire** (NIFC WFIGS, MTBS) | US | Fires burning now, this year's perimeters and incidents, perimeters since 2020, burned areas since 1984. | CRS84 | `fire/wfigs/latest/<current, year_to_date, all_since_2016, incidents_ytd>.parquet`, `fire/mtbs/latest/mtbs_perimeters.parquet` |
+| **NWI wetlands** (USFWS) | US | Wetland and deepwater polygons with their Cowardin class; mapping projects with the imagery year. | **EPSG:4269** | `wetlands/nwi/2026-10/state=<XX>/wetlands.parquet`, `projects.parquet` |
+| **NCES schools** | US | Public (2024-25), private (2023-24) and postsecondary (2025-26) schools as points, with county, district and locale. | CRS84 | `schools/latest/<public, private, postsecondary>.parquet` |
+| **Census TIGER/Line: tribal areas, 2020 blocks** | US | Reservations, trust lands, tribal tracts (2026); 8.2 million 2020 blocks with population and housing units. | **EPSG:4269** | `census/tiger/2026/aiarelated/<layer>.parquet`, `census/tiger/2020/block/state=<XX>/blocks.parquet` |
 | **OpenStreetMap** | US, Canada, Mexico | Buildings, roads, railways, POIs, amenities, places, land use, water, boundaries, power, public transport, updated daily. | CRS84 | `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet` |
 
 Read `reference/datasets.md` for columns, value domains and licences
@@ -39,8 +45,8 @@ before writing a query against a dataset you have not used in this
 session. Each collection also publishes an agent guide with its full
 column list: `https://parquetry.geomermaids.com/<dataset>/catalog/<collection>/AGENTS.md`.
 
-For a map, use the PMTiles archives of GAUL, CORINE, Census (TIGER and
-ACS), NRI, Natural Earth, PAD-US, the NAD coverage and GeoNames places with
+For a map, use the PMTiles archives (every dataset but NFHL, Geoconnex,
+OSM and the fire incident points has them, GMWID one per layer) with
 MapLibre, not the Parquet files: `reference/datasets.md`, "Maps".
 
 Outside these footprints, say so. Do not answer a land-cover question
@@ -98,7 +104,12 @@ Write the definitions before the SQL, and state them in the answer.
 - Geoconnex: only some dams and gages carry the river they sit on
   (`mainstem_uri`): say so when you count along a river.
 - Census: US states, DC, Puerto Rico and the territories. Nebraska has no
-  State House: its one chamber is in the State Senate file.
+  State House: its one chamber is in the State Senate file. The 2020
+  blocks leave out the Island Areas (AS, GU, MP, VI).
+- Structures: residents (`POP_MEDIAN`) are missing for most of DC and all
+  the territories; use the 2020 blocks for people there.
+- Fire: WFIGS perimeters start in practice in 2020; MTBS covers 1984 on
+  for large fires only, a year or two late.
 
 ### 3. Read only what the question needs
 
@@ -123,8 +134,9 @@ Write the definitions before the SQL, and state them in the answer.
 
 ### 4. Align the coordinate systems
 
-- GAUL, GMWID, Geoconnex and OSM are CRS84 lon/lat. NFHL and Census are
-  NAD83 lon/lat (EPSG:4269). The two differ by 1 to 2 m in the US: cast
+- GAUL, GMWID, Geoconnex, OSM, WorldPop, Structures, the fire layers and
+  the schools are CRS84 lon/lat. NFHL, Census, PAD-US and NWI are NAD83
+  lon/lat (EPSG:4269). The two differ by 1 to 2 m in the US: cast
   the NFHL or Census geometry with `geometry::GEOMETRY` to drop the CRS
   tag and join them directly.
 - CORINE is EPSG:3035 (metres). Transform the area of interest into 3035
@@ -153,6 +165,13 @@ two worked examples below. Adapt the closest one:
 | Per-unit statistics | "Wind farm capacity per French région" |
 | Along a river | "Dams on the Colorado and its tributaries" |
 | Water monitoring sites | "Where is water quality measured near this site?" |
+| Population near a point, outside the US | "People within 10 km of this site in Nairobi" |
+| Fire history at a site | "Has this site burned?" |
+| Buildings and residents inside an area | "Buildings inside the Eaton fire perimeter" |
+| Population inside an area, from 2020 blocks | "How many people live inside this polygon?" |
+| Wetlands at a site | "Are there wetlands on or near this parcel?" |
+| Schools in the flood zone | "Which schools in this county are in the 100-year floodplain?" |
+| Tribal area at a point | "Is this site on tribal land?" |
 
 For a single location, `scripts/locate.py <lon> <lat>` returns the admin
 units, flood zone, election districts, land cover class, OSM region and
@@ -176,7 +195,9 @@ Give, in this order:
 4. The data dates: the FEMA `fema_update_date` per delivery, the OSM
    build date (`osm/snapshots.json`), CORINE 2018, GAUL 2024, the
    Geoconnex export date (`geoconnex/latest/_source.json`), TIGER/Line
-   2026 (`census/_source.json`).
+   2026 (`census/_source.json`), WorldPop 2025, the NWI release
+   (October 2026) and the project `IMAGE_YR`, the NCES school year, the
+   Structures `IMAGE_DATE`, the fire perimeter date.
 5. The credit for each dataset used, from `reference/datasets.md`.
 
 Offer the SQL you ran, so the person can rerun or adjust it.
@@ -235,3 +256,14 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   does not exist: check `addresses/nad/r24/_coverage.json` first.
 - Reading the NAD states through the S3 glob, pass
   `hive_partitioning = false`: the `State` column already holds the value.
+- Wetlands: NWI also maps lakes, rivers and bays. Leave `WETLAND_TYPE`
+  Lake, Riverine and Estuarine and Marine Deepwater out of a wetland
+  area, and never present NWI as a jurisdictional delineation.
+- Structures `POP_MEDIAN` is a model: sum it for residents in a hazard
+  area, but quote the 2020 blocks or the ACS for a population figure.
+  The Eaton fire perimeter: 25,800 by Structures, 24,295 by the blocks.
+- A fire perimeter, a WorldPop cell and a school point are not legal or
+  exact boundaries: perimeters lag the fire, cells are 2.5 km, a school
+  point is its geocode, not its campus. Not for evacuation decisions.
+- Read the NWI and 2020 block state files with `hive_partitioning = false`
+  through a glob: the `state` column already holds the value.

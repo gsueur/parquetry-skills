@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 (2026-11-09)
+
+### reference-data
+
+- Five datasets, eighteen in all:
+  - WorldPop 2025 (R2025A): people per H3 cell with age groups and sex,
+    one file per country and a world file.
+  - FEMA USA Structures: 146 million building footprints with occupancy
+    and ORNL's modelled residents, one file per state, and H3 counts.
+  - Wildfire: NIFC WFIGS current, year to date, since 2016 and incident
+    points; MTBS burned areas since 1984.
+  - USFWS National Wetlands Inventory, October 2026: 38.7 million
+    polygons, one file per state, and the mapping projects.
+  - NCES schools: public, private and postsecondary.
+- Census: the 2026 tribal areas (aiannh, anrc, aitsn, ttract, tbg) and the
+  2020 blocks with population and housing units, on H3 too.
+- Seven tested recipes: population near a point outside the US, fire
+  history at a site, buildings and residents inside an area, population
+  inside an area from 2020 blocks, wetlands at a site, schools in the
+  flood zone, tribal area at a point.
+- Pitfalls: WFIGS history starts in practice in 2020 (no Camp Fire, use
+  MTBS); NWI maps deepwater too and is not a jurisdictional delineation;
+  Structures residents are a model (Eaton fire: 25,800 by Structures,
+  24,295 by the 2020 blocks), missing in DC and the territories.
+- Maps: PMTiles for every new dataset, and one per GMWID layer.
+
 ## 0.5.0 (2026-11-07)
 
 ### reference-data

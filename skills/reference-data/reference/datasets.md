@@ -10,8 +10,9 @@ declared as the GeoParquet covering, and is sorted along a Hilbert curve.
 Filter on `bbox` first. The geometry column is native Parquet `GEOMETRY`.
 One exception: the CORINE H3 table is keyed by cell, without `bbox`.
 
-The `bbox` fields are FLOAT in GAUL, GMWID, OpenStreetMap, Geoconnex and
-Census (DOUBLE in NFHL and CORINE). Compare them with literals or FLOAT values:
+The `bbox` fields are FLOAT in GAUL, GMWID, OpenStreetMap, Geoconnex,
+Census, WorldPop, Structures, the fire layers, NWI and the schools (DOUBLE
+in NFHL and CORINE). Compare them with literals or FLOAT values:
 a DOUBLE bound (any computed value, any Python float passed as a
 parameter) makes DuckDB 1.5 cast the column and skip no row group, 5 to
 10 times slower. Cast computed bounds with `::FLOAT`, widened by 1e-4
@@ -472,6 +473,172 @@ are not statistical areas (mountains, lakes, buildings).
   Gazetteer Files"; GeoNames CC BY 4.0, credit "GeoNames
   (www.geonames.org)".
 
+## WorldPop 2025: population on H3 cells, worldwide
+
+WorldPop Global2 R2025A: people per H3 resolution 7 cell (about 5 km²)
+in 2025, with age groups and sex. **CRS84**, the cell hexagon as
+geometry.
+
+- Files: `worldpop/R2025A/2025/country=<ISO3>/worldpop_2025.parquet`, one
+  per country (253, GAUL `iso3_code`), and
+  `worldpop/R2025A/2025/worldpop_2025_world_r5.parquet` (resolution 5,
+  one row per cell, for world and continent questions). Every country:
+  `s3://parquetry/worldpop/R2025A/2025/country=*/worldpop_2025.parquet`.
+- Columns: `h3` (the cell as text), `country`, `population`, `pop_0_14`,
+  `pop_15_64`, `pop_65_plus`, `pop_80_plus`, `female`, `male`, `area_km2`,
+  `lon`, `lat` (the cell centre: use it, not `ST_Centroid`, which a cell
+  cut at the antimeridian puts far away).
+- Modelled estimates, good to a cell (about 2.5 km across), not to a
+  street. In the US, prefer the 2020 blocks or the ACS; elsewhere this is
+  the population layer.
+- H3 joins: `h3_string_to_h3(h3)` with DuckDB's community `h3` extension;
+  `h3_cell_to_parent` aggregates to coarser cells.
+- Licence: CC BY 4.0. Credit "WorldPop (www.worldpop.org), Global2 R2025A
+  v1, University of Southampton, doi:10.5258/SOTON/WP00846".
+
+## FEMA USA Structures: building footprints, United States
+
+USA Structures (ORNL and FEMA): 146 million building footprints with
+occupancy class and ORNL's modelled residents. **CRS84**.
+
+- Files: `structures/latest/state=<XX>/structures.parquet`, one per state
+  or territory (56, postal code). Every state:
+  `s3://parquetry/structures/latest/state=*/structures.parquet`.
+- Counts per area without the footprints:
+  `structures/latest/state=<XX>/cells.parquet`, one row per H3 cell and
+  resolution (`h3_res` 4, 6, 8) with `structures`, `residential` and
+  `population`. A cell on a state line is in both states' files.
+- Columns: `BUILD_ID`, `OCC_CLS` (Residential, Commercial, Industrial,
+  Education, Government, Assembly, Agriculture, Utility and Misc,
+  Unclassified), `PRIM_OCC` ('Single Family Dwelling', 'Multi - Family
+  Dwelling'...), `OUTBLDG` (sheds, garages), `HEIGHT`, `SQMETERS`,
+  `SQFEET`, `PROP_ADDR`, `PROP_CITY`, `PROP_ZIP`, `FIPS` (county),
+  `CENSUSCODE` (block), `POP_MEDIAN`, `POP_CI95_LOWER`, `POP_CI95_UPPER`,
+  `IMAGE_DATE`, `SOURCE`, `state`.
+- Residents: `sum(POP_MEDIAN)` is ORNL's model, not a census count.
+  Commercial and other non-residential buildings have NULL. Under 90% of
+  residential footprints carry an estimate in DC (27%) and the
+  territories (0%): there, use the 2020 blocks for people. Arkansas runs
+  high against the 2020 census.
+- States come from different imagery vintages (`IMAGE_DATE`): compare
+  states with care.
+- Licence: public domain. Credit "Oak Ridge National Laboratory (ORNL);
+  FEMA Geospatial Response Office".
+
+## Wildfire perimeters: NIFC WFIGS and MTBS, United States
+
+Fire perimeters and incident points, **CRS84**, dates in UTC.
+
+| File | Rows | What |
+|---|---|---|
+| `fire/wfigs/latest/current.parquet` | tens | fires burning now, rebuilt several times a day |
+| `fire/wfigs/latest/year_to_date.parquet` | about 8,300 | this year's perimeters |
+| `fire/wfigs/latest/all_since_2016.parquet` | about 43,000 | the last perimeter of every WFIGS fire |
+| `fire/wfigs/latest/incidents_ytd.parquet` | about 45,000 | one point of origin per incident this year, most never get a perimeter |
+| `fire/mtbs/latest/mtbs_perimeters.parquet` | 31,514 | burned areas since 1984, large fires only (1,000 acres West, 500 East) |
+
+- WFIGS perimeter columns start with `poly_` (`poly_IncidentName`,
+  `poly_GISAcres`, `poly_PolygonDateTime`), incident columns with `attr_`
+  (`attr_FireDiscoveryDateTime`, `attr_FireOutDateTime` empty while it
+  burns, `attr_PercentContained`, `attr_IncidentTypeCategory` WF wildfire
+  / RX prescribed / CX complex, `attr_FireCause`, `attr_POOState` as
+  `US-CA`, `attr_POOFips` county FIPS). `incidents_ytd` has the same
+  names without `attr_`.
+- **WFIGS history starts in practice in 2020**: fewer than ten
+  perimeters before it (no Camp Fire, 2018). For older fires, use MTBS.
+- MTBS: `event_id`, `irwinid`, `incid_name`, `incid_type`, `ig_date`,
+  `burnbndac` (acres), and the burn severity thresholds. A fire reaches
+  MTBS a year or two after it burns (352 fires for 2025 so far).
+- `attr_IrwinID` (WFIGS), `IrwinID` (incidents) and `irwinid` (MTBS) join
+  the same fire across layers where present.
+- Perimeters overlap (complexes, re-burns): take the union before summing
+  an area.
+- Not for evacuation or safety decisions. Say so when reporting an active
+  fire.
+- Licence: public domain. Credit "National Interagency Fire Center
+  (NIFC), WFIGS" and "Monitoring Trends in Burn Severity (MTBS), USGS and
+  USDA Forest Service".
+
+## USFWS National Wetlands Inventory, October 2026
+
+Wetlands and deepwater habitats: 38.7 million polygons. **NAD83
+(EPSG:4269)**, like TIGER.
+
+- Files: `wetlands/nwi/2026-10/state=<XX>/wetlands.parquet`, 57 (states,
+  DC, PR, territories; `UM` for Palmyra and Kingman). Read with
+  `hive_partitioning = false`: the `state` column already holds it.
+  `wetlands/nwi/2026-10/projects.parquet`: the mapping projects, with the
+  imagery year (`IMAGE_YR`). `codes.parquet`: FWS's definitions, by
+  `ATTRIBUTE`.
+- Columns: `NWI_ID`, `ATTRIBUTE` (the Cowardin code, for example `PFO1A`),
+  `WETLAND_TYPE`, `ACRES`, `SYSTEM_NAME`, `SUBSYSTEM_NAME`, `CLASS_NAME`,
+  `SUBCLASS_NAME`, `WATER_REGIME_NAME`, `MODIFIER1_NAME`, `MODIFIER2_NAME`.
+- `WETLAND_TYPE`: Freshwater Emergent Wetland, Freshwater Forested/Shrub
+  Wetland, Freshwater Pond, Estuarine and Marine Wetland, Riverine, Lake,
+  Estuarine and Marine Deepwater, Other. Lakes, rivers and bays are
+  mapped too: "wetland area" usually leaves out Lake, Riverine and
+  Estuarine and Marine Deepwater.
+- Each polygon is in one file: FWS's copies across state downloads were
+  removed. A polygon crossing a state line is in the state of its
+  interior point; clip to the state for an exact state area. `ACRES` is
+  the whole polygon's.
+- Imagery years run from 1971 to 2024: give the `IMAGE_YR`
+  of the project under the site.
+- Not a jurisdictional delineation (Clean Water Act or otherwise). Say so.
+- Licence: public domain. Credit "U.S. Fish and Wildlife Service,
+  National Wetlands Inventory".
+
+## NCES school locations, United States
+
+The National Center for Education Statistics' EDGE geocodes. **CRS84**
+points.
+
+| File | Rows | Key | Year |
+|---|---|---|---|
+| `schools/latest/public.parquet` | 102,178 | `NCESSCH` (12 characters), `LEAID` the district | 2024-25 |
+| `schools/latest/private.parquet` | 22,510 | `PPIN` | 2023-24 |
+| `schools/latest/postsecondary.parquet` | 6,438 | `UNITID` (IPEDS) | 2025-26 |
+
+- Columns: `NAME`, `STREET`, `CITY`, `STATE`, `ZIP`, `STFIP`, `CNTY`
+  (county GEOID), `NMCNTY`, `LOCALE`, `LAT`, `LON`, `CBSA`, `CSA`, `CD`,
+  `SLDL`, `SLDU`, `SCHOOLYEAR`.
+- `LEAID` joins TIGER school district `GEOID`
+  (`census/tiger/2026/school/unsd, elsd, scsd.parquet`); `CNTY` joins
+  county `GEOID`; `NCESSCH` joins NCES's Common Core of Data (enrollment,
+  grades), which is not here.
+- `LOCALE`: first digit 1 city, 2 suburb, 3 town, 4 rural. NCES writes
+  `M` for missing and `N` for not applicable.
+- Licence: public domain. Credit "U.S. Department of Education, National
+  Center for Education Statistics, EDGE".
+
+## Census TIGER/Line: tribal areas and 2020 blocks
+
+**NAD83 (EPSG:4269)**, TIGER's columns.
+
+- Tribal areas, 2026: `census/tiger/2026/aiarelated/<layer>.parquet`:
+  `aiannh` (867 reservations, off-reservation trust lands, statistical
+  areas, Hawaiian home lands; `COMPTYP` T for an off-reservation trust
+  land, R for the rest; `AIANNHR` F federally, S state recognized), `anrc` (12 Alaska Native Regional
+  Corporations), `aitsn` (484 tribal subdivisions), `ttract` (494 tribal
+  tracts), `tbg` (936 tribal block groups). `AIANNHCE` links them, and
+  NRI's `tribal_counties`. The Census Gazetteer's `aiannh` joins on `GEOID`.
+- 2020 tabulation blocks, with the 2020 census counts:
+  `census/tiger/2020/block/state=<XX>/blocks.parquet`, 52 files (50
+  states, DC, PR; 8,174,955 blocks), read with `hive_partitioning = false`.
+  Columns `GEOID20` (15 digits: state, county, tract, block), `POP20`,
+  `HOUSING20`, `ALAND20`, `AWATER20`, `UR20` (urban/rural),
+  `INTPTLAT20`, `INTPTLON20` (interior point, as text).
+  `POP20` sums to 334,735,155, the official 2020 count with PR.
+- Blocks on H3: `census/tiger/2020/block/blocks_h3.parquet` (`h3_res` 4,
+  6, 8; `population`, `housing_units`, `blocks`), each block counted at
+  its interior point.
+- Blocks are the finest US population: for a small or odd-shaped area
+  (a fire perimeter, a flood zone, 1 km around a site), sum `POP20` of
+  the blocks whose interior point is inside. The Island Areas (AS, GU,
+  MP, VI) are not included.
+- Licence: public domain. Credit "U.S. Census Bureau, TIGER/Line 2026"
+  and "2020 Census Redistricting Data (P.L. 94-171)".
+
 ## OpenStreetMap: US, Canada, Mexico
 
 - Files: `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet`, for
@@ -518,10 +685,18 @@ to the data and answer range requests:
 | `padus/v4.1/combined.pmtiles` | `combined` | 0-12 | `Unit_Nm`, `Category`, `Mang_Name_Desc`, `Des_Tp_Desc`, `GAP_Sts`, `Pub_Access`, `IUCN_Cat`, `GIS_Acres`, codes |
 | `addresses/nad/r24/addresses_h3.pmtiles` | `cells_r4` z0-4, `cells_r6` z5-7, `cells_r8` z8-11 | 0-11 | address count per H3 cell: where the NAD has data |
 | `gazetteer/geonames/latest/cities1000.pmtiles` | `cities1000` | 0-12 | `geonameid`, `name`, `feature_code`, `country_code`, `population` (the most populous place per cell at each zoom) |
+| `gmwid/latest/<layer>.pmtiles` (27 archives) | the layer name | from 2, 4 or 6 to 13, by layer | `name`, `operator`, `origin`, the layer's class and `voltage_kv` where it has one |
+| `worldpop/R2025A/2025/worldpop_2025.pmtiles` (1.3 GB) | `population` | 0-9 | `h3`, `population`, `density`, `pop_0_14`, `pop_65_plus` |
+| `structures/latest/state=<XX>/structures.pmtiles` | `cells_r4` z0-4, `cells_r6` z5-7, `cells_r8` z8-12, `structures` z13-14 | 0-14 | cells: `structures`, `residential`, `population`; footprints: `BUILD_ID`, `OCC_CLS`, `PRIM_OCC`, `HEIGHT`, `SQFEET`, `POP_MEDIAN` |
+| `fire/wfigs/latest/<current, year_to_date, all_since_2016>.pmtiles`, `fire/mtbs/latest/mtbs_perimeters.pmtiles` | the file name | 0-12 (year to date 0-13, current 1-14) | name, acres, type, containment (WFIGS); `event_id`, `incid_name`, `ig_date`, `burnbndac` (MTBS) |
+| `wetlands/nwi/2026-10/wetlands.pmtiles` (13 GB) | `wetlands` | 6-13 | `ATTRIBUTE`, `WETLAND_TYPE`, `ACRES` |
+| `schools/latest/<public, private, postsecondary>.pmtiles` | the file name | 0-13 | the key, `NAME`, `CITY`, `STATE`, `LOCALE` |
+| `census/tiger/2026/aiarelated/<layer>.pmtiles` | the layer name | 0-12 | `GEOID`, `NAMELSAD`, `AIANNHCE`, `ALAND`, `AWATER`, `color_index` |
+| `census/tiger/2020/block/blocks_h3.pmtiles` | `cells_r4` z0-4, `cells_r6` z5-7, `cells_r8` z8-11 | 0-11 | `population`, `housing_units`, `blocks` per H3 cell |
 
 - CORINE features carry their official colour: `["get", "color"]` draws
   the legend with no lookup table.
-- Census districts carry `color_index` (0 to 5), chosen so that no two
+- Census districts and tribal areas carry `color_index` (0 to 5), chosen so that no two
   neighbouring districts share it: map it to a six-colour palette.
 - ACS styles colour `median_household_income` in fixed national classes
   ($50k, 65k, 80k, 100k, 125k), so a colour means the same at every
@@ -542,7 +717,9 @@ Every dataset has a STAC catalog (Portolan profile):
 `https://parquetry.geomermaids.com/<dataset>/catalog/catalog.json` for
 `gaul`, `gmwid`, `nfhl`, `clc`, `geoconnex`, `census` (TIGER/Line, and
 the ACS in its `acs-2024` sub-catalog), `nri`, `natural-earth`, `padus`,
-`addresses`, `gazetteer` and `osm`.
+`addresses`, `gazetteer`, `worldpop`, `structures`, `fire`, `wetlands`,
+`schools` and `osm`. The tribal areas and the 2020 blocks are in
+`census`, as `tiger-2026-aiarelated` and `tiger-2020-block`.
 `https://catalog.geomermaids.com/catalog.json` is the root that links
 them all, with a browser for people. Each
 collection links its files, its PMTiles archive, its styles and an
