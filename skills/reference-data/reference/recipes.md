@@ -1004,3 +1004,93 @@ Window Rock, Arizona: Navajo Nation Reservation (`2430R`, federally
 recognized), tribal census tract T035. Census boundaries are statistical,
 not legal descriptions of jurisdiction. NRI scores the tribal areas in
 `nri/v1.20/tribal_counties.parquet`, by `AIANNHCE`.
+
+## State layer at a point: zoning and parcel
+
+"What is the zoning of this site, and which parcel is it on?" Find the
+layer in the state's theme manifests, then read it at the point in the
+state's own CRS, about 3 s in all. Vermont here; the same steps work for
+the seven other states with their prefix and CRS (`reference/datasets.md`,
+"Statewide GIS layers").
+
+<!-- test: state-layer-at-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET geometry_always_xy = true;
+CREATE SECRET parquetry (TYPE s3, ENDPOINT 's3.geomermaids.com', URL_STYLE 'path',
+                         KEY_ID '', SECRET '', REGION 'auto');
+
+-- 1. Which layers: every theme manifest of the state, searched by title.
+SELECT f.theme, f.name, f.title, f.features
+FROM read_json('s3://parquetry/vt/*/_manifest.json', maximum_object_size = 100000000) AS m,
+     unnest(m.files) AS t(f)
+WHERE f.title ILIKE '%zoning%' OR f.title ILIKE '%parcel%';
+
+-- 2. The point in the state's CRS (Vermont: EPSG:32145, metres).
+CREATE TABLE p AS
+SELECT ST_Transform(ST_Point(-72.5809, 44.2623), 'OGC:CRS84', 'EPSG:32145') AS g;
+SET VARIABLE x = (SELECT ST_X(g) FROM p);
+SET VARIABLE y = (SELECT ST_Y(g) FROM p);
+
+-- 3. The zoning district and the parcel under it.
+SELECT 'zoning' AS layer, z.category AS what, z.district AS value
+FROM read_parquet('https://parquetry.geomermaids.com/vt/boundaries_planning/zoning.parquet') AS z
+WHERE z.bbox.xmin <= getvariable('x')::FLOAT + 1 AND z.bbox.xmax >= getvariable('x')::FLOAT - 1
+  AND z.bbox.ymin <= getvariable('y')::FLOAT + 1 AND z.bbox.ymax >= getvariable('y')::FLOAT - 1
+  AND ST_Intersects(z.geometry, (SELECT g FROM p))
+UNION ALL
+SELECT 'parcel', c.TNAME || ' ' || c.SPAN, c.E911ADDR
+FROM read_parquet('https://parquetry.geomermaids.com/vt/cadastre/parcels.parquet') AS c
+WHERE c.bbox.xmin <= getvariable('x')::FLOAT + 1 AND c.bbox.xmax >= getvariable('x')::FLOAT - 1
+  AND c.bbox.ymin <= getvariable('y')::FLOAT + 1 AND c.bbox.ymax >= getvariable('y')::FLOAT - 1
+  AND ST_Intersects(c.geometry, (SELECT g FROM p));
+```
+
+The Vermont State House lawn, Montpelier: zoning district "Urban Center"
+(`category` "Montpelier: Zoning districts"). Vermont's zoning is 371 town
+maps folded into one file: the town's own district names, not a statewide
+classification. Zoning layers are planning data, not a legal determination:
+say so, and point to the town for the current ordinance. In NH, WA and OR
+the CRS is in feet: a distance in `ST_DWithin` is in feet there.
+
+## Jobs near a point
+
+"How many people work within 1 km of this site, and in which sectors?"
+LODES 2024 workplace jobs (WAC) summed over the 2020 blocks whose interior
+point is within the radius, about 1 s.
+
+<!-- test: jobs-near-point -->
+```sql
+INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;
+SET geometry_always_xy = true;
+SET VARIABLE state = 'MA';
+SET VARIABLE lon = -71.0580;
+SET VARIABLE lat = 42.3603;
+SET VARIABLE r = 1000;  -- metres
+
+-- The 2020 blocks whose interior point is within r. The box is widened
+-- for the longitude: 1 km is 0.0122 degrees at 42 N.
+CREATE TABLE blk AS
+SELECT GEOID20
+FROM read_parquet('https://parquetry.geomermaids.com/census/tiger/2020/block/state='
+                  || getvariable('state') || '/blocks.parquet', hive_partitioning = false)
+WHERE bbox.xmin <= -71.0455 AND bbox.xmax >= -71.0705
+  AND bbox.ymin <= 42.3693 AND bbox.ymax >= 42.3513
+  AND ST_Distance_Sphere(ST_Point(INTPTLON20::DOUBLE, INTPTLAT20::DOUBLE),
+                         ST_Point(getvariable('lon'), getvariable('lat'))) <= getvariable('r');
+
+-- Jobs at those blocks: all jobs, and three sectors (NAICS 2-digit columns).
+SELECT count(*) AS blocks_with_jobs, sum(w.C000) AS jobs,
+       sum(w.CNS10) AS finance_insurance, sum(w.CNS12) AS professional_services,
+       sum(w.CNS18) AS food_accommodation, any_value(w.year) AS year
+FROM blk
+JOIN read_parquet('https://parquetry.geomermaids.com/census/lodes/2024/state='
+                  || getvariable('state') || '/wac.parquet', hive_partitioning = false) AS w
+  ON w.w_geocode = blk.GEOID20;
+```
+
+Boston City Hall: about 222,000 jobs within 1 km in 2024. LODES counts
+jobs, not people (one person can hold two), at the employer's reporting
+address: a firm can report all its branches at its headquarters. Use `rac`
+for where workers live and `od` for commuting flows. The box bounds are
+literals for a 1 km radius around this point: widen them for a larger one.

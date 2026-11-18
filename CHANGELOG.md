@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 (2026-11-18)
+
+### reference-data
+
+- Statewide GIS layers of eight states: Massachusetts (MassGIS), Maine,
+  New Hampshire, New York, California, Washington, Oregon and Vermont,
+  about 2,100 layers in the states' own CRS. Find a layer by title in the
+  theme manifests (`<state>/<theme>/_manifest.json`, one glob for a whole
+  state), then read it with the point or area transformed into the state's
+  CRS.
+- LEHD LODES 2024: jobs by workplace and residence block, home-to-work
+  flows, and tract and county sums with outlines.
+- Elevation tile indexes: USGS 3DEP (1 m, 1/3 and 1 arc-second) and
+  Copernicus GLO-30, with each tile's URL, CRS, dates and elevation range;
+  Annual NLCD listed in the catalogs.
+- Two tested recipes: a state layer at a point (Vermont zoning and
+  parcel), jobs near a point.
+- Pitfalls: feet in the NH, WA and OR CRSs; zoning and parcels are not
+  legal records; Vermont's CC BY-SA 4.0 layers; LODES counts jobs at the
+  employer's reporting address.
+- Catalogs: the eight states, `usgs-rasters`, `copernicus-dem` and
+  `lodes-2024`; the root also links Overture and NAIP.
+
 ## 0.6.0 (2026-11-09)
 
 ### reference-data

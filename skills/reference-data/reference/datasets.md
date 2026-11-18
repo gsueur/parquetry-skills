@@ -11,8 +11,8 @@ Filter on `bbox` first. The geometry column is native Parquet `GEOMETRY`.
 One exception: the CORINE H3 table is keyed by cell, without `bbox`.
 
 The `bbox` fields are FLOAT in GAUL, GMWID, OpenStreetMap, Geoconnex,
-Census, WorldPop, Structures, the fire layers, NWI and the schools (DOUBLE
-in NFHL and CORINE). Compare them with literals or FLOAT values:
+Census, LODES, WorldPop, Structures, the fire layers, NWI, the schools, the
+statewide layers and the elevation indexes (DOUBLE in NFHL and CORINE). Compare them with literals or FLOAT values:
 a DOUBLE bound (any computed value, any Python float passed as a
 parameter) makes DuckDB 1.5 cast the column and skip no row group, 5 to
 10 times slower. Cast computed bounds with `::FLOAT`, widened by 1e-4
@@ -639,6 +639,40 @@ points.
 - Licence: public domain. Credit "U.S. Census Bureau, TIGER/Line 2026"
   and "2020 Census Redistricting Data (P.L. 94-171)".
 
+## LEHD LODES 2024: jobs by census block
+
+The Census Bureau's LEHD Origin-Destination Employment Statistics, version
+8, All Jobs (JT00), by 2020 Census block. Tables as LODES ships them, plus
+`year`.
+
+| File | Rows are | Key |
+|---|---|---|
+| `census/lodes/2024/state=<xx>/wac.parquet` | jobs by workplace block | `w_geocode` |
+| `census/lodes/2024/state=<xx>/rac.parquet` | jobs by residence block | `h_geocode` |
+| `census/lodes/2024/state=<xx>/od.parquet` | home block to work block pairs | `w_geocode`, `h_geocode`; `interstate` marks the pairs with a home in another state |
+| `census/lodes/2024/<wac, rac>_<tract, county>.parquet` | WAC and RAC summed per 2020 tract and county, with TIGER/Line 2020 outlines | `GEOID` |
+
+- `state=<XX>` is the postal code (`state=MA`). Read a state file with
+  `hive_partitioning = false`: the `state` column already holds it.
+- WAC and RAC columns: `C000` all jobs; `CA01`-`CA03` age (29 or
+  younger, 30 to 54, 55 or older); `CE01`-`CE03` monthly earnings
+  ($1,250 or less, up to $3,333, more); `CNS01`-`CNS20` NAICS sectors
+  (`CNS10` finance and insurance, `CNS12` professional services, `CNS16`
+  health care, `CNS18` accommodation and food); `CR*` race, `CT*`
+  ethnicity, `CD*` education, `CS*` sex. OD: `S000` jobs and the
+  `SA*`, `SE*`, `SI*` splits.
+- The block keys are the 2020 block `GEOID20`: join
+  `census/tiger/2020/block/state=<XX>/blocks.parquet` for geometry or
+  interior points. The tract and county files carry their outlines
+  (**NAD83, EPSG:4269**).
+- Alaska has no WAC or OD after 2016 and Michigan none after 2021: their
+  files are their latest year, and `year` says so in every row.
+- Jobs, not people: one worker with two jobs counts twice. Workplaces are
+  the employer's reporting address, so a firm can put all its branches at
+  its headquarters. Federal jobs are counted; the self-employed are not.
+- Licence: public domain. Credit "U.S. Census Bureau, LEHD
+  Origin-Destination Employment Statistics (LODES 8), 2024".
+
 ## OpenStreetMap: US, Canada, Mexico
 
 - Files: `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet`, for
@@ -664,6 +698,100 @@ points.
   Full lists: `osm/catalog/<theme>/AGENTS.md`.
 - A feature crossing a state border is in both files.
 - Licence: ODbL 1.0. Credit "(c) OpenStreetMap contributors".
+
+## Statewide GIS layers: eight US states
+
+The statewide vector layers of eight state GIS programs, each layer one
+GeoParquet file and (most) one PMTiles archive, in the state's own CRS,
+with the publisher's columns. Rebuilt weekly, layer by layer, when the
+source moves.
+
+| State | Prefix | Layers | Themes | CRS |
+|---|---|---|---|---|
+| Massachusetts (MassGIS) | `massgis/` | 339 | 20 | EPSG:26986, metres |
+| Maine (GeoLibrary, DEP) | `maine/` | 312 | 8 | each layer its own, most EPSG:26919 (UTM 19N), metres |
+| New Hampshire (NH GRANIT) | `nh/` | 101 | 9 | EPSG:3437, **US survey feet** |
+| New York (NYS GIS Clearinghouse) | `ny/` | 98 | 9 | EPSG:26918 (UTM 18N), metres |
+| California (State Geoportal) | `ca/` | 442 | 9 | EPSG:3310 (California Albers), metres |
+| Washington (Geospatial Open Data Portal) | `wa/` | 454 | 11 | EPSG:2927, **US survey feet** |
+| Oregon (GEOHub) | `or/` | 85 | 10 | EPSG:2992, **international feet** |
+| Vermont (Open Geodata Portal, VCGI) | `vt/` | 282 | 11 | EPSG:32145, metres |
+
+- Files: `<prefix><theme>/<layer>.parquet` and `.pmtiles`, for example
+  `vt/cadastre/parcels.parquet` or `massgis/parcels/l3_taxpar_poly.parquet`.
+- Find a layer by its title in the theme manifests:
+  `<prefix><theme>/_manifest.json` lists each file with `name`, `title`,
+  `description`, `features`, `crs` and `bbox`. One glob reads them all:
+  `read_json('s3://parquetry/<prefix>*/_manifest.json')` (recipe "State
+  layer at a point"). Each layer has a guide with its columns at
+  `<prefix>catalog/<theme>/<layer>/AGENTS.md`, and each state one at
+  `<prefix>catalog/AGENTS.md`.
+- Coordinates are in the state's CRS, not lon/lat: transform the point or
+  the area into it first (`ST_Transform(geom, 'OGC:CRS84', 'EPSG:32145')`),
+  and remember that distances and areas are in feet in NH, WA and OR.
+  Maine mixes CRSs: read `crs` in the manifest. One MassGIS layer is in
+  EPSG:5070.
+- Some sources of the same kind are folded into one file with a `year`,
+  `category`, `scenario`, `from_year` or `to_year` column: Vermont's 371
+  town zoning maps (`category` "<town>: <map>"), California's 762 wildlife
+  species ranges and 96 vegetation maps, Oregon's water rights. Filter on
+  that column. Columns a folded map does not share sit in
+  `other_attributes`, a JSON string.
+- Parcels: MassGIS splits the tax parcels into polygons
+  (`parcels/l3_taxpar_poly`) and assessor records (`parcels/l3_assess`,
+  no geometry), joined on `LOC_ID`. New York and Vermont publish no owner
+  names or mailing addresses here; Washington's carry none upstream. New
+  York's parcel polygons cover the 38 counties that share them, its
+  centroids all 62.
+- Not here: the layers whose terms forbid redistribution or commercial
+  use, copies of national datasets (Census, NHD, WBD, NWI: use those
+  datasets), the building footprints (use USA Structures), and layers
+  covering less than a fifth of the state.
+- Rasters: New Hampshire and California also publish thematic rasters as
+  Cloud-Optimized GeoTIFFs under `nh/rasters/` and `ca/rasters/` (the NH
+  Wildlife Action Plan habitat land cover; California's CWHR predicted
+  habitat models), each with a value table
+  `<item>.classes.parquet`. Read them with GDAL or rasterio, not DuckDB.
+- Dates: each layer's last edit and row count upstream are in
+  `<prefix>_source.json`, keyed by layer name.
+- Licence and credit: credit the agency each layer names (in the manifest
+  and `<prefix><theme>/ATTRIBUTION.txt`). Vermont's 71 layers marked
+  CC BY-SA 4.0 keep that licence, and their collections say so;
+  California's Fish and Wildlife layers are CC BY 4.0; Oregon's GEOHub
+  allows any lawful use; Maine's terms are "Access: Public. Use: User
+  accepts risk."
+
+## Elevation and land cover rasters, linked
+
+Indexes and catalogs of Cloud-Optimized GeoTIFFs that stay where their
+publishers host them. DuckDB finds the tiles; GDAL or rasterio reads the
+pixels from the `url`.
+
+| Index | Rows | Covers |
+|---|---|---|
+| `usgs-rasters/index/3dep-tiles.parquet` | 133,437 | USGS 3DEP DEMs: `product` `1m` (every lidar project, overlaps kept, with acquisition dates), `13` (1/3 arc-second, about 10 m), `1` (1 arc-second, about 30 m) |
+| `copernicus-dem/index/copernicus-glo30-tiles.parquet` | 26,450 | Copernicus DEM GLO-30, the world at about 30 m, one 1-degree tile per row |
+
+- Columns: `tile_id`, `product`, `project`, `acquired_start`,
+  `acquired_end`, `published`, `url` (HTTPS), `s3_url`, `crs`, `epsg`,
+  `nodata`, `pixel_size`, `width`, `height`, `min_elev`, `max_elev`,
+  `west`, `south`, `east`, `north`, `geometry` (the footprint, lon/lat),
+  `bbox`.
+- Elevation at a point: filter the index on `bbox`, take the tile (for
+  `1m`, the most recent `acquired_end` among overlaps), then
+  `gdallocationinfo -wgs84 /vsicurl/<url> <lon> <lat>`. Tiles of one
+  product can be in different CRSs (the 1 m tiles are in UTM zones):
+  read `epsg` per tile.
+- The Copernicus bucket sends no CORS headers: read its tiles from a
+  server or a script, not from a browser.
+- Annual NLCD, 1985 to 2024 (land cover, impervious surface, change,
+  confidence), CONUS: one mosaic per year and product, listed in the
+  `usgs-rasters` catalog (`annual-nlcd-*` collections), hosted on Source
+  Cooperative.
+- Licence: 3DEP and NLCD public domain, credit "U.S. Geological Survey".
+  Copernicus: "(c) DLR e.V. 2010-2014 and (c) Airbus Defence and Space GmbH
+  2014-2018 provided under COPERNICUS by the European Union and ESA; all
+  rights reserved", free to use with that credit.
 
 ## Maps: PMTiles archives
 
@@ -693,6 +821,9 @@ to the data and answer range requests:
 | `schools/latest/<public, private, postsecondary>.pmtiles` | the file name | 0-13 | the key, `NAME`, `CITY`, `STATE`, `LOCALE` |
 | `census/tiger/2026/aiarelated/<layer>.pmtiles` | the layer name | 0-12 | `GEOID`, `NAMELSAD`, `AIANNHCE`, `ALAND`, `AWATER`, `color_index` |
 | `census/tiger/2020/block/blocks_h3.pmtiles` | `cells_r4` z0-4, `cells_r6` z5-7, `cells_r8` z8-11 | 0-11 | `population`, `housing_units`, `blocks` per H3 cell |
+| `census/lodes/2024/<wac, rac>_tract.pmtiles` | the file name | read its `metadata` | `GEOID`, `C000` and the job columns |
+| `<state prefix><theme>/<layer>.pmtiles` | the manifest's `pmtiles[].layer` | the manifest's `min_zoom`, `max_zoom` | the manifest's `properties`: a few naming and class columns |
+| `usgs-rasters/index/3dep-1m-tiles.pmtiles`, `3dep-arcsec-tiles.pmtiles`, `copernicus-dem/index/copernicus-glo30-tiles.pmtiles` | read its `metadata` | read its `metadata` | the tile footprints, for a picker |
 
 - CORINE features carry their official colour: `["get", "color"]` draws
   the legend with no lookup table.
@@ -718,10 +849,13 @@ Every dataset has a STAC catalog (Portolan profile):
 `gaul`, `gmwid`, `nfhl`, `clc`, `geoconnex`, `census` (TIGER/Line, and
 the ACS in its `acs-2024` sub-catalog), `nri`, `natural-earth`, `padus`,
 `addresses`, `gazetteer`, `worldpop`, `structures`, `fire`, `wetlands`,
-`schools` and `osm`. The tribal areas and the 2020 blocks are in
-`census`, as `tiger-2026-aiarelated` and `tiger-2020-block`.
-`https://catalog.geomermaids.com/catalog.json` is the root that links
-them all, with a browser for people. Each
+`schools`, `osm`, the eight states (`massgis`, `maine`, `nh`, `ny`,
+`ca`, `wa`, `or`, `vt`; `nh` and `ca` with a `rasters` sub-catalog),
+`usgs-rasters` and `copernicus-dem`. The tribal areas, the 2020 blocks and
+LODES are in `census`, as `tiger-2026-aiarelated`, `tiger-2020-block` and
+`lodes-2024`. `https://catalog.geomermaids.com/catalog.json` is the root
+that links them all, with a browser for people; it also links Overture's
+own STAC catalog and Microsoft Planetary Computer's NAIP imagery. Each
 collection links its files, its PMTiles archive, its styles and an
 `AGENTS.md`.
 
