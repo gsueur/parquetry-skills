@@ -40,7 +40,7 @@ not general knowledge:
 - *Is this site on protected land, and who manages it?*
 - *Geocode these addresses and tell me which are in the flood zone.*
 
-The agent turns the question into a spatial query over eighteen open datasets
+The agent turns the question into a spatial query over two dozen open datasets
 published by Geomermaids on [parquetry](https://geoparquet.geomermaids.com),
 runs it with DuckDB straight from the URLs, and answers with the number,
 the definitions it chose, the coverage, the data dates and the credits.
@@ -66,6 +66,9 @@ parts of the GeoParquet files the question needs.
 | [NWI wetlands](https://parquetry.geomermaids.com/wetlands/) | United States | Wetland and deepwater polygons with their Cowardin class |
 | [NCES schools](https://parquetry.geomermaids.com/schools/) | United States | Public, private and postsecondary schools |
 | [Census tribal areas and 2020 blocks](https://census.geomermaids.com) | United States | Reservations and tribal tracts; 2020 census population and housing units by block |
+| [LODES 2024](https://catalog.geomermaids.com) | United States | Jobs by workplace and residence block, by age, earnings and sector, and home-to-work flows |
+| [Statewide GIS layers](https://catalog.geomermaids.com) | MA, ME, NH, NY, CA, WA, OR, VT | About 2,100 layers from the state GIS programs: parcels, zoning, roads, water, habitat, hazards |
+| [Elevation tiles](https://catalog.geomermaids.com) | US, World | USGS 3DEP (1 m to 30 m) and Copernicus GLO-30 DEM tiles, with Annual NLCD land cover |
 | [Natural Earth](https://parquetry.geomermaids.com/natural-earth/) | World | Countries, states, cities with population, coastlines, rivers, lakes, ports, airports, at three scales |
 | [OpenStreetMap](https://geoparquet.geomermaids.com) | US, Canada, Mexico | Buildings, roads, POIs, places and more, updated nightly |
 

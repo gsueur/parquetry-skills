@@ -1,11 +1,11 @@
 ---
 name: reference-data
-description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", "geocode this address", "which of these addresses are in the flood zone", "is this site on protected land", "share of the county under federal management", "where is Springfield", "how many people live within 10 km of this site in Kenya", "how many buildings were inside the fire perimeter", "has this site burned", "are there wetlands on this parcel", "which schools are in the flood zone", "is this site on tribal land", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), US protected and conservation lands with manager, GAP status and public access (USGS PAD-US), 99 million US address points (USDOT National Address Database), place names to coordinates for US areas and 13 million names worldwide (Census Gazetteer, GeoNames), world population on H3 cells with age and sex (WorldPop 2025), 146 million US building footprints with modelled residents (FEMA USA Structures), US wildfire perimeters live and since 1984 (NIFC WFIGS, MTBS), US wetlands (USFWS NWI), US public, private and postsecondary schools (NCES), US tribal areas and 2020 census blocks with population (TIGER/Line), and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
+description: Answer spatial questions with the Geomermaids parquetry reference datasets, queried in place with DuckDB. Use when a question needs real geographic data rather than general knowledge, such as "what is the predominant land use in Hérault", "how many buildings in Eastern Massachusetts are in the 100-year floodplain", "which substations are within 5 km of this site", "which district is this point in", "how many km of high-voltage line cross this region", "which dams are on the Colorado and its tributaries", "which congressional and state legislative districts is this address in", "how much of Spain is forest", "how many people live within 5 km of my sites", "median household income by tract in Suffolk County", "which natural hazards threaten this site", "counties with the highest hurricane risk", "the ten largest cities within 200 km", "geocode this address", "which of these addresses are in the flood zone", "is this site on protected land", "share of the county under federal management", "where is Springfield", "how many people live within 10 km of this site in Kenya", "how many buildings were inside the fire perimeter", "has this site burned", "are there wetlands on this parcel", "which schools are in the flood zone", "is this site on tribal land", "what is the zoning of this Vermont parcel", "find the tax parcels of this Washington county", "how many people work within 1 km of this site", "which DEM tiles cover this county", or when drawing a map of these layers, or when tagging a list of locations with country, admin unit, flood zone, land cover or nearby infrastructure. Covers administrative units worldwide (FAO GAUL 2024), power, telecom, oil and gas and water infrastructure worldwide (GMWID), US flood zones (FEMA NFHL), European land cover (CORINE 2018), US rivers, dams, gages, watersheds and water monitoring sites (Geoconnex), US congressional and state legislative districts for the 2026 elections (Census TIGER/Line), US population, income, housing and commuting by state, county, place, tract, block group and ZIP code area (Census ACS 2020-2024), US natural hazard risk for 18 hazards by tract and county (FEMA National Risk Index), world countries, states, cities, coastlines, rivers and lakes at three scales (Natural Earth), US protected and conservation lands with manager, GAP status and public access (USGS PAD-US), 99 million US address points (USDOT National Address Database), place names to coordinates for US areas and 13 million names worldwide (Census Gazetteer, GeoNames), world population on H3 cells with age and sex (WorldPop 2025), 146 million US building footprints with modelled residents (FEMA USA Structures), US wildfire perimeters live and since 1984 (NIFC WFIGS, MTBS), US wetlands (USFWS NWI), US public, private and postsecondary schools (NCES), US tribal areas and 2020 census blocks with population (TIGER/Line), US jobs by workplace and residence block and commuting flows (LEHD LODES 2024), the statewide GIS layers of Massachusetts, Maine, New Hampshire, New York, California, Washington, Oregon and Vermont (parcels, zoning, roads, water, habitat, hazards: 2,100 layers), the USGS 3DEP and Copernicus GLO-30 elevation tiles and Annual NLCD, and OpenStreetMap buildings, roads, POIs and more for the US, Canada and Mexico.
 ---
 
 # Spatial questions with the parquetry reference datasets
 
-Eighteen open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
+Two dozen open datasets sit on `https://parquetry.geomermaids.com` as GeoParquet.
 You query them in place with DuckDB over HTTP range requests: no download
 step, no account, no API. Most questions combine two or three of them: an
 area from one, a phenomenon from another, the features to count from a
@@ -38,6 +38,9 @@ credit.
 | **NWI wetlands** (USFWS) | US | Wetland and deepwater polygons with their Cowardin class; mapping projects with the imagery year. | **EPSG:4269** | `wetlands/nwi/2026-10/state=<XX>/wetlands.parquet`, `projects.parquet` |
 | **NCES schools** | US | Public (2024-25), private (2023-24) and postsecondary (2025-26) schools as points, with county, district and locale. | CRS84 | `schools/latest/<public, private, postsecondary>.parquet` |
 | **Census TIGER/Line: tribal areas, 2020 blocks** | US | Reservations, trust lands, tribal tracts (2026); 8.2 million 2020 blocks with population and housing units. | **EPSG:4269** | `census/tiger/2026/aiarelated/<layer>.parquet`, `census/tiger/2020/block/state=<XX>/blocks.parquet` |
+| **LODES 2024** (Census LEHD) | US, 50 states + DC | Jobs by workplace block (WAC) and by residence block (RAC), by age, earnings and sector; home-to-work flows (OD). Join the 2020 blocks on `GEOID20`. | **EPSG:4269** (tract and county files) | `census/lodes/2024/state=<XX>/<wac, rac, od>.parquet`; `<wac, rac>_<tract, county>.parquet` with outlines |
+| **Statewide GIS layers** | MA, ME, NH, NY, CA, WA, OR, VT | The states' own layers: tax parcels, zoning, roads, address points, water rights, habitat, geologic hazards, facilities, about 2,100 in all. Find a layer by title in the theme manifests. | **the state's own** (State Plane, UTM, Albers; feet in NH, WA, OR) | `<state>/<theme>/<layer>.parquet`, listed in `<state>/<theme>/_manifest.json`; prefixes `massgis`, `maine`, `nh`, `ny`, `ca`, `wa`, `or`, `vt` |
+| **Elevation tiles** (USGS 3DEP, Copernicus GLO-30) | US; World | Which DEM tiles cover an area, at 1 m, 10 m, 30 m, with each tile's URL, CRS, dates and elevation range. The pixels are read with GDAL. | CRS84 | `usgs-rasters/index/3dep-tiles.parquet`, `copernicus-dem/index/copernicus-glo30-tiles.parquet` |
 | **OpenStreetMap** | US, Canada, Mexico | Buildings, roads, railways, POIs, amenities, places, land use, water, boundaries, power, public transport, updated daily. | CRS84 | `osm/latest/country=<CC>/state=<ISO 3166-2>/<theme>.parquet` |
 
 Read `reference/datasets.md` for columns, value domains and licences
@@ -110,6 +113,11 @@ Write the definitions before the SQL, and state them in the answer.
   the territories; use the 2020 blocks for people there.
 - Fire: WFIGS perimeters start in practice in 2020; MTBS covers 1984 on
   for large fires only, a year or two late.
+- Statewide layers: only the eight states, and only the layers in their
+  manifests. A layer can cover part of a state (New York's parcel
+  polygons: 38 of 62 counties); read its `features` and `bbox`.
+- LODES: Alaska is 2016 and Michigan 2021 for the workplace and OD
+  tables; `year` says so.
 
 ### 3. Read only what the question needs
 
@@ -139,6 +147,9 @@ Write the definitions before the SQL, and state them in the answer.
   lon/lat (EPSG:4269). The two differ by 1 to 2 m in the US: cast
   the NFHL or Census geometry with `geometry::GEOMETRY` to drop the CRS
   tag and join them directly.
+- The statewide layers are in the state's CRS (`reference/datasets.md`
+  lists them): transform the point or area into it, never the layer. NH,
+  WA and OR are in feet, so a `ST_DWithin` distance there is in feet.
 - CORINE is EPSG:3035 (metres). Transform the area of interest into 3035
   with `ST_Transform(geom, 'OGC:CRS84', 'EPSG:3035')`. Never transform the
   CORINE polygons, which are many and large.
@@ -172,6 +183,8 @@ two worked examples below. Adapt the closest one:
 | Wetlands at a site | "Are there wetlands on or near this parcel?" |
 | Schools in the flood zone | "Which schools in this county are in the 100-year floodplain?" |
 | Tribal area at a point | "Is this site on tribal land?" |
+| State layer at a point | "What is the zoning of this site, and which parcel is it on?" |
+| Jobs near a point | "How many people work within 1 km of this site?" |
 
 For a single location, `scripts/locate.py <lon> <lat>` returns the admin
 units, flood zone, election districts, land cover class, OSM region and
@@ -197,7 +210,9 @@ Give, in this order:
    Geoconnex export date (`geoconnex/latest/_source.json`), TIGER/Line
    2026 (`census/_source.json`), WorldPop 2025, the NWI release
    (October 2026) and the project `IMAGE_YR`, the NCES school year, the
-   Structures `IMAGE_DATE`, the fire perimeter date.
+   Structures `IMAGE_DATE`, the fire perimeter date, LODES 2024 (or the
+   row's `year`), a state layer's `last_modified` from
+   `<state>/_source.json`.
 5. The credit for each dataset used, from `reference/datasets.md`.
 
 Offer the SQL you ran, so the person can rerun or adjust it.
@@ -267,3 +282,10 @@ Offer the SQL you ran, so the person can rerun or adjust it.
   point is its geocode, not its campus. Not for evacuation decisions.
 - Read the NWI and 2020 block state files with `hive_partitioning = false`
   through a glob: the `state` column already holds the value.
+- A statewide layer is the agency's data as published, not a legal record:
+  zoning is the town's ordinance map as last sent to the state, a parcel
+  is the assessor's sketch, not a survey. Say so, and credit the agency
+  the manifest names. Vermont's CC BY-SA 4.0 layers keep that licence in
+  anything derived from them.
+- LODES counts jobs, not workers, at the employer's reporting address:
+  a firm can report every branch at its headquarters.
