@@ -6,6 +6,12 @@ Two skills for AI agents working with GeoParquet:
 - **`write-geoparquet`** writes optimized GeoParquet the way these datasets
   are written (see [below](#writing-geoparquet)).
 
+The name comes from parquetry, the Geomermaids public data bucket at
+[parquetry.geomermaids.com](https://parquetry.geomermaids.com), live since
+April 2026. These skills are not related to
+[Parquetry](https://parquetry.io), the Java library for Parquet and
+GeoParquet.
+
 <p>
   <a href="docs/agent-boston-1200.webp"><img src="docs/agent-boston-1200.webp" width="49%" alt="Map of the Boston waterfront: OpenStreetMap buildings that touch a FEMA 1% annual-chance flood zone are highlighted. Answer: 95,264 buildings in Eastern Massachusetts."></a>
   <a href="docs/agent-herault-1200.webp"><img src="docs/agent-herault-1200.webp" width="49%" alt="Land cover map of Hérault: forest and garrigue in the hills, vineyards on the plain, lagoons on the coast. Answer: 49% forest and semi-natural land, vineyards the largest single class at 23.8%."></a>
